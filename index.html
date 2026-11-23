@@ -35,7 +35,7 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .g .s{font-size:11px;color:var(--muted)}
 .g.live .s{color:var(--live);font-weight:600}
 .g[aria-current=true]{outline:2px solid var(--accent);outline-offset:-1px}
-@media (max-width:520px){.bar h1{display:none}}
+@media (max-width:520px){.bar h1{display:none}.bar{gap:.3rem}#day{min-width:4.6em}}
 
 main{padding-top:.6rem;padding-bottom:1.5rem}
 .status{font-size:12px;color:var(--muted);margin:.3rem 0;min-height:1em}
@@ -53,6 +53,7 @@ main{padding-top:.6rem;padding-bottom:1.5rem}
 /* game view layout: tabs on mobile, side by side on desktop */
 #tabs{margin:.5rem 0 0}
 #panes{display:grid;gap:1rem;margin-top:.4rem}
+#panes>*{min-width:0}   /* else a wide box score widens the grid (and the page) instead of scrolling inside .tw */
 @media (max-width:999px){
   #gameView[data-tab=plays] #boxPane,#gameView[data-tab=box] #playsPane{display:none}
 }
@@ -203,8 +204,10 @@ let sections = new Map(), periodCount = 0, filterKey = '';
 
 // ---------------------------------------------------------------- fetching
 async function getJSON(url) {
-  // 'no-cache' revalidates, so unchanged responses can come back as a tiny 304
-  const r = await fetch(url, { cache: 'no-cache' });
+  // Plain GET with no options on purpose. cache:'no-cache' (or any custom header) adds a non-safelisted
+  // Cache-Control request header -> CORS preflight -> the API answers OPTIONS with 403 and the fetch fails.
+  // The API sends no ETag/Last-Modified (so 304s are impossible) and max-age<=10s, so default caching is fine.
+  const r = await fetch(url);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }
@@ -213,7 +216,8 @@ const bbref = name => 'https://www.basketball-reference.com/search/search.fcgi?s
 
 function team(c) {
   const t = c.team || {};
-  return { id: String(t.id), abbr: t.abbreviation || '?', name: t.shortDisplayName || t.displayName || '',
+  // the summary header's team objects have `name` ("Heat") but no shortDisplayName
+  return { id: String(t.id), abbr: t.abbreviation || '?', name: t.shortDisplayName || t.name || t.displayName || '',
     color: t.color ? '#' + t.color : null, score: c.score ?? '', homeAway: c.homeAway };
 }
 
@@ -264,7 +268,9 @@ function parsePlayers(tp) {
 const div = (a, b) => (b > 0 ? a / b : null);
 const pct = (a, b) => { const d = div(a, b); return d == null ? null : 100 * d; };
 function sumRows(ps) { const t = { pm: null }; COUNT_KEYS.forEach(k => (t[k] = 0)); ps.forEach(p => COUNT_KEYS.forEach(k => (t[k] += p[k] || 0))); return t; }
-const possOf = (T, O) => T.fga + 0.4 * T.fta - 1.07 * (div(T.orb, T.orb + O.drb) || 0) * (T.fga - T.fgm) + T.tov;
+// team-level turnovers (shot clock, 8-second etc.) aren't credited to any player; possessions and TOV% need them
+const allTov = T => T.tov + (T.teamTov || 0);
+const possOf = (T, O) => T.fga + 0.4 * T.fta - 1.07 * (div(T.orb, T.orb + O.drb) || 0) * (T.fga - T.fgm) + allTov(T);
 
 function shooting(p) {
   return { ts: pct(p.pts, 2 * (p.fga + 0.44 * p.fta)), efg: pct(p.fgm + 0.5 * p.tpm, p.fga),
@@ -282,12 +288,12 @@ function playerAdv(p, t, o, five, poss) {
     a.astp = pct(p.ast, (m / five) * t.fgm - p.fgm);
     a.stlp = pct(p.stl * five, m * poss);
     a.blkp = pct(p.blk * five, m * (o.fga - o.tpa));
-    a.usg = pct((p.fga + 0.44 * p.fta + p.tov) * five, m * (t.fga + 0.44 * t.fta + t.tov));
+    a.usg = pct((p.fga + 0.44 * p.fta + p.tov) * five, m * (t.fga + 0.44 * t.fta + allTov(t)));
   }
   return a;
 }
 function teamAdv(t, o, poss) {
-  const a = shooting(t);
+  const a = shooting({ ...t, tov: allTov(t) });
   a.orbp = pct(t.orb, t.orb + o.drb); a.drbp = pct(t.drb, t.drb + o.orb); a.trbp = pct(t.reb, t.reb + o.reb);
   a.astp = pct(t.ast, t.fgm); a.stlp = pct(t.stl, poss); a.blkp = pct(t.blk, o.fga - o.tpa);
   a.usg = null; a.gmsc = null;
@@ -304,12 +310,23 @@ function buildBox(s) {
   });
   if (!teams.some(T => T.players.some(p => !p.dnp))) return null;
   const [A, B] = teams;
-  A.tot = sumRows(A.players); B.tot = sumRows(B.players);
+  for (const T of teams) {
+    T.tot = sumRows(T.players);
+    const ts = (s.boxscore.teams || []).find(x => String(x.team?.id) === T.id)?.statistics || [];
+    const stat = n => parseFloat(ts.find(x => x.name === n)?.displayValue);
+    const total = stat('totalTurnovers'), teamOnly = stat('teamTurnovers');
+    T.tot.teamTov = Number.isFinite(teamOnly) ? teamOnly : Number.isFinite(total) ? Math.max(0, total - T.tot.tov) : 0;
+  }
   const poss = 0.5 * (possOf(A.tot, B.tot) + possOf(B.tot, A.tot));
-  const mp = Math.max(A.tot.min, B.tot.min);
+  // player MIN is rounded to whole minutes, so sums drift (e.g. 241). Finals have a known length: 48 + 5 per OT.
+  const comp = s.header?.competitions?.[0] || {};
+  const periods = Math.max(0, ...(comp.competitors || []).map(c => c.linescores?.length || 0));
+  const exact = comp.status?.type?.state === 'post' && periods >= 4 ? 48 + 5 * (periods - 4) : null;
+  const mp = exact ? 5 * exact : Math.max(A.tot.min, B.tot.min);
   const pace = mp > 0 ? (48 * poss) / (mp / 5) : null;
   for (const [T, O] of [[A, B], [B, A]]) {
-    const five = (T.tot.min || mp) / 5;
+    const five = (exact || (T.tot.min || mp) / 5);
+    T.gameMin = five * 5;
     T.players.forEach(p => (p.a = playerAdv(p, T.tot, O.tot, five, poss)));
     T.tot.a = teamAdv(T.tot, O.tot, poss);
     T.ortg = pct(T.tot.pts, poss); T.drtg = pct(O.tot.pts, poss); T.pace = pace; T.poss = poss;
@@ -554,41 +571,42 @@ const f1 = v => (v == null || !Number.isFinite(v) ? '' : v.toFixed(1));
 const f3 = v => (v == null || !Number.isFinite(v) ? '' : v.toFixed(3).replace(/^0/, '').replace(/^-0/, '-'));
 const sg = v => (v == null ? '' : v > 0 ? '+' + v : String(v));
 
-// w = column width in em (fixed so both team tables line up and scroll together)
+// w = column width in em (fixed so both team tables line up and scroll together).
+// Sized from the widest header/value measured in Chromium across real games (incl. padding).
 const COLS = [
-  { h: 'MIN', t: 'Minutes played', w: 2.5, v: r => f0(r.min) },
-  { h: 'PTS', t: 'Points', w: 2.5, v: r => r.pts, k: 1 },
-  { h: 'REB', t: 'Total rebounds', w: 2.5, v: r => r.reb },
-  { h: 'AST', t: 'Assists', w: 2.5, v: r => r.ast },
-  { h: 'STL', t: 'Steals', w: 2.4, v: r => r.stl },
-  { h: 'BLK', t: 'Blocks', w: 2.4, v: r => r.blk },
-  { h: 'TO', t: 'Turnovers', w: 2.2, v: r => r.tov },
-  { h: 'FG', t: 'Field goals made-attempted', w: 3.6, v: r => r.fgm + '-' + r.fga },
-  { h: '3P', t: '3-pointers made-attempted', w: 3.3, v: r => r.tpm + '-' + r.tpa },
-  { h: 'FT', t: 'Free throws made-attempted', w: 3.3, v: r => r.ftm + '-' + r.fta },
-  { h: 'OREB', t: 'Offensive rebounds', w: 2.9, v: r => r.orb },
-  { h: 'DREB', t: 'Defensive rebounds', w: 2.9, v: r => r.drb },
-  { h: 'PF', t: 'Personal fouls', w: 2.1, v: r => r.pf },
-  { h: '+/-', t: 'Plus/minus while on court', w: 2.7, v: r => sg(r.pm) },
-  { h: 'FG%', t: 'Field goal %', w: 3.1, v: r => f1(pct(r.fgm, r.fga)), a0: 1 },
-  { h: '3P%', t: '3-point %', w: 3.1, v: r => f1(pct(r.tpm, r.tpa)) },
-  { h: 'FT%', t: 'Free throw %', w: 3.1, v: r => f1(pct(r.ftm, r.fta)) },
-  { h: 'TS%', t: 'True shooting %: PTS / (2 × (FGA + 0.44 × FTA))', w: 3.1, v: r => f1(r.a?.ts) },
-  { h: 'eFG%', t: 'Effective FG %: (FGM + 0.5 × 3PM) / FGA', w: 3.3, v: r => f1(r.a?.efg) },
-  { h: 'USG%', t: 'Usage %: share of team plays used while on court', w: 3.3, v: r => f1(r.a?.usg) },
-  { h: 'AST%', t: 'Assist %: share of teammate FGs assisted while on court', w: 3.3, v: r => f1(r.a?.astp) },
-  { h: 'TOV%', t: 'Turnover %: turnovers per 100 plays', w: 3.3, v: r => f1(r.a?.tovp) },
-  { h: 'ORB%', t: 'Offensive rebound %: share of available offensive rebounds grabbed', w: 3.3, v: r => f1(r.a?.orbp) },
-  { h: 'DRB%', t: 'Defensive rebound %', w: 3.3, v: r => f1(r.a?.drbp) },
-  { h: 'TRB%', t: 'Total rebound %', w: 3.3, v: r => f1(r.a?.trbp) },
-  { h: 'STL%', t: 'Steal %: steals per 100 opponent possessions', w: 3.2, v: r => f1(r.a?.stlp) },
-  { h: 'BLK%', t: 'Block %: share of opponent 2PA blocked', w: 3.2, v: r => f1(r.a?.blkp) },
-  { h: '3PAr', t: '3-point attempt rate: 3PA / FGA', w: 3.1, v: r => f3(r.a?.tpar) },
-  { h: 'FTr', t: 'Free throw rate: FTA / FGA', w: 3.1, v: r => f3(r.a?.ftr) },
-  { h: 'AST/TO', t: 'Assist to turnover ratio', w: 3.5, v: r => f1(r.a?.ato) },
-  { h: 'GmSc', t: 'Game Score (Hollinger): rough single-number productivity, ~10 average, 40+ outstanding', w: 3.2, v: r => f1(r.a?.gmsc) },
+  { h: 'MIN', t: 'Minutes played', w: 3, v: r => f0(r.min) },
+  { h: 'PTS', t: 'Points', w: 3, v: r => r.pts, k: 1 },
+  { h: 'REB', t: 'Total rebounds', w: 3, v: r => r.reb },
+  { h: 'AST', t: 'Assists', w: 3.1, v: r => r.ast },
+  { h: 'STL', t: 'Steals', w: 2.9, v: r => r.stl },
+  { h: 'BLK', t: 'Blocks', w: 3, v: r => r.blk },
+  { h: 'TO', t: 'Turnovers', w: 2.4, v: r => r.tov },
+  { h: 'FG', t: 'Field goals made-attempted', w: 4.3, v: r => r.fgm + '-' + r.fga },
+  { h: '3P', t: '3-pointers made-attempted', w: 4.3, v: r => r.tpm + '-' + r.tpa },
+  { h: 'FT', t: 'Free throws made-attempted', w: 4.3, v: r => r.ftm + '-' + r.fta },
+  { h: 'OREB', t: 'Offensive rebounds', w: 3.7, v: r => r.orb },
+  { h: 'DREB', t: 'Defensive rebounds', w: 3.7, v: r => r.drb },
+  { h: 'PF', t: 'Personal fouls', w: 2.3, v: r => r.pf },
+  { h: '+/-', t: 'Plus/minus while on court', w: 3, v: r => sg(r.pm) },
+  { h: 'FG%', t: 'Field goal %', w: 3.9, v: r => f1(pct(r.fgm, r.fga)), a0: 1 },
+  { h: '3P%', t: '3-point %', w: 3.9, v: r => f1(pct(r.tpm, r.tpa)) },
+  { h: 'FT%', t: 'Free throw %', w: 3.9, v: r => f1(pct(r.ftm, r.fta)) },
+  { h: 'TS%', t: 'True shooting %: PTS / (2 × (FGA + 0.44 × FTA))', w: 3.9, v: r => f1(r.a?.ts) },
+  { h: 'eFG%', t: 'Effective FG %: (FGM + 0.5 × 3PM) / FGA', w: 4, v: r => f1(r.a?.efg) },
+  { h: 'USG%', t: 'Usage %: share of team plays used while on court', w: 4.2, v: r => f1(r.a?.usg) },
+  { h: 'AST%', t: 'Assist %: share of teammate FGs assisted while on court', w: 4.1, v: r => f1(r.a?.astp) },
+  { h: 'TOV%', t: 'Turnover %: turnovers per 100 plays', w: 4.1, v: r => f1(r.a?.tovp) },
+  { h: 'ORB%', t: 'Offensive rebound %: share of available offensive rebounds grabbed', w: 4.1, v: r => f1(r.a?.orbp) },
+  { h: 'DRB%', t: 'Defensive rebound %', w: 4.1, v: r => f1(r.a?.drbp) },
+  { h: 'TRB%', t: 'Total rebound %', w: 4, v: r => f1(r.a?.trbp) },
+  { h: 'STL%', t: 'Steal %: steals per 100 opponent possessions', w: 3.9, v: r => f1(r.a?.stlp) },
+  { h: 'BLK%', t: 'Block %: share of opponent 2PA blocked', w: 4, v: r => f1(r.a?.blkp) },
+  { h: '3PAr', t: '3-point attempt rate: 3PA / FGA', w: 3.9, v: r => f3(r.a?.tpar) },
+  { h: 'FTr', t: 'Free throw rate: FTA / FGA', w: 3.9, v: r => f3(r.a?.ftr) },
+  { h: 'AST/TO', t: 'Assist to turnover ratio', w: 4.8, v: r => f1(r.a?.ato) },
+  { h: 'GmSc', t: 'Game Score (Hollinger): rough single-number productivity, ~10 average, 40+ outstanding', w: 3.9, v: r => f1(r.a?.gmsc) },
 ];
-const NAME_W = 8.6;
+const NAME_W = 9.6;   // long names ("N. Alexander-Walker F") still ellipsize; full name is in the link title
 
 function orderTeams(teams) {
   const i = teams.findIndex(T => T.abbr === state.top);

@@ -1,0 +1,12 @@
+{
+  "name": "nba-gameday",
+  "private": true,
+  "description": "Static NBA live dashboard (single index.html). package.json exists only for the test harness.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-reporter=spec test/*.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}
