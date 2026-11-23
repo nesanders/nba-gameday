@@ -752,3 +752,19 @@ test('game URL: a shared link restores filter, quarter, order and box sort', asy
   app.window.history.back();
   await app.settle(() => !app.$('#gameView').hidden && app.$('#filters button[aria-pressed=true]')?.textContent === 'MIA');
 });
+
+test('game cards mark the winner of finished games (ESPN flag, or the higher score without it)', async () => {
+  const check = async routes => {
+    const app = await boot({ hash: '#v=game', routes });
+    await app.settle(() => app.$$('#gameList .gc').length === 7);
+    const fin = app.$$('#gameList .gc')[0], rows = fin.querySelectorAll('.ls tbody tr');
+    assert.deepEqual(Array.from(rows, r => [r.querySelector('.ab').textContent.replace('@', ''), r.className]), [['DET', 'lose'], ['ATL', 'win']]);
+    assert.equal(rows[1].title, 'Winner');
+    // live and upcoming games mark nobody
+    assert.equal(app.$$('#gameList .gc').slice(1).filter(c => c.querySelector('tr.win, tr.lose')).length, 0);
+  };
+  await check(defaultRoutes());
+  const sb = fixture('scoreboard');
+  for (const e of sb.events) for (const c of e.competitions[0].competitors) delete c.winner;
+  await check({ ...defaultRoutes(), scoreboard: sb });
+});

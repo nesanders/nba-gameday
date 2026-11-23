@@ -148,7 +148,11 @@ th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
 .ls th:first-child,.ls td:first-child{text-align:left;width:100%}
 .ls .ab{font-weight:700;border-left:3px solid var(--c,transparent);padding-left:.3rem}
 .ls .rec{color:var(--muted);font-size:11px;margin-left:.35rem;font-weight:400}
-.ls td.t{font-weight:700}
+.ls td.t{font-weight:700;position:relative;padding-right:.9em}
+/* finished games: the loser's row is muted, the winner's total gets a small pointer */
+.ls tr.lose td{color:var(--muted)}
+.ls tr.lose td.t{font-weight:400}
+.ls tr.win td.t::after{content:"\25C2";position:absolute;right:.05em;font-size:.8em;color:var(--fg)}
 .ls th:not(:first-child),.ls td:not(:first-child){min-width:2em}
 .ls tr:last-child td{border-bottom:0}
 .gc .pl{display:grid;grid-template-columns:2.7em 1fr;gap:.1rem .3rem;font-size:12px;margin-top:.35rem;line-height:1.35}
@@ -379,6 +383,7 @@ function team(c) {
     color: t.color ? '#' + t.color : null, score: c.score ?? '', homeAway: c.homeAway,
     lines: (c.linescores || []).map(l => l.displayValue ?? String(l.value ?? '')),
     record: c.records?.[0]?.summary || '',
+    winner: c.winner === true,
     // scoreboard only: each team's points/rebounds/assists leader (used on home cards until box data loads)
     leaders: (c.leaders || []).filter(L => ['points', 'rebounds', 'assists'].includes(L.name) && L.leaders?.[0])
       .map(L => ({ cat: L.name, value: L.leaders[0].displayValue, name: L.leaders[0].athlete?.shortName || L.leaders[0].athlete?.displayName || '' })) };
@@ -1205,7 +1210,10 @@ function gameCard(g) {
   }
   const tb = el('tbody');
   for (const t of teams) {
-    const tr = el('tr'), name = el('td');
+    // winner: ESPN's flag, or the higher score once the game is final
+    const won = g.state === 'post' && (t.winner || (!teams.some(x => x.winner) && +t.score > Math.max(...teams.filter(x => x !== t).map(x => +x.score))));
+    const tr = el('tr', g.state === 'post' ? (won ? 'win' : 'lose') : null), name = el('td');
+    if (g.state === 'post') tr.title = won ? 'Winner' : '';
     const ab = el('span', 'ab');
     ab.append(homeMark(t, true), t.abbr);
     if (t.color) ab.style.setProperty('--c', t.color);
