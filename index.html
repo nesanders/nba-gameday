@@ -7,8 +7,8 @@
 <title>NBA Gameday</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
 <style>
-:root{--bg:#fff;--fg:#151515;--muted:#6b6b6b;--line:#e4e4e4;--card:#f4f4f5;--accent:#1d6fe0;--live:#d42020;--hl:#fff3b8;--hh:0px}
-@media (prefers-color-scheme:dark){:root{--bg:#0f0f10;--fg:#ececec;--muted:#9a9a9a;--line:#2a2a2c;--card:#1a1a1c;--accent:#6ea8ff;--live:#ff5c5c;--hl:#4a4010}}
+:root{--bg:#fff;--fg:#151515;--muted:#6b6b6b;--line:#e4e4e4;--card:#f4f4f5;--accent:#1d6fe0;--live:#d42020;--hl:#fff3b8;--fol:#eaf1fd;--hh:0px}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0f10;--fg:#ececec;--muted:#9a9a9a;--line:#2a2a2c;--card:#1a1a1c;--accent:#6ea8ff;--live:#ff5c5c;--hl:#4a4010;--fol:#16233a}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}   /* display rules elsewhere must never override the hidden attribute */
 body{margin:0;font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg)}
@@ -35,6 +35,8 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 #games{display:flex;gap:.4rem;overflow-x:auto;padding:0 0 .45rem;scrollbar-width:thin}
 .g{flex:0 0 auto;min-width:118px;text-align:left;padding:.3rem .5rem;font-variant-numeric:tabular-nums;font-size:13px}
 .g .t{display:flex;justify-content:space-between;gap:.6rem}
+.hm{display:inline-block;width:.85em;color:var(--muted);font-weight:400;font-size:.9em}
+.tm .hm,.th .hm{width:auto;margin-right:-.3rem}
 .g .s{font-size:11px;color:var(--muted)}
 .g.live .s{color:var(--live);font-weight:600}
 .g[aria-current=true]{outline:2px solid var(--accent);outline-offset:-1px}
@@ -43,10 +45,10 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 #settings .sethead{display:flex;align-items:center;justify-content:space-between;margin:0 0 .45rem}
 #settings .sethead h2{font-size:13px;margin:0}
 #settings select,#settings button{background:var(--bg)}
+#settings button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
 .setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.35rem .9rem;align-items:center}
 .setgrid label{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
 .setgrid label.ck{justify-content:flex-start}
-.setgrid .hint{grid-column:1/-1;font-size:11.5px;color:var(--muted);margin:0}
 #usage{margin-top:.55rem;font-variant-numeric:tabular-nums}
 #usage table{font-size:12.5px;margin:.25rem 0}
 #usage th,#usage td{padding:.15rem .5rem .15rem 0;border-bottom:1px solid var(--line);background:none;cursor:default}
@@ -162,7 +164,11 @@ th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
 .card .val{font-weight:700;font-variant-numeric:tabular-nums}
 .card .sub{display:block;font-size:11px;color:var(--muted)}
 .card li.go{grid-template-columns:1.3em 1fr auto .7em;cursor:pointer;border-radius:4px}
+.card li.fol{background:var(--fol)}
 .card li.go:hover,.card li.go:focus-visible{background:var(--card);outline:none}
+.follow{grid-column:1/-1}
+.follow .teams{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.25rem}
+.follow .teams button{min-width:3.4em;padding:.15rem .35rem;font-size:12px}
 .card li.go:hover .mu,.card li.go:focus-visible .mu{color:var(--accent);text-decoration:underline}
 .card .chev{color:var(--muted);font-size:15px;line-height:1}
 .card li.go:hover .chev{color:var(--accent)}
@@ -218,8 +224,7 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
         <p class="empty" id="empty" hidden>No plays yet.</p>
       </div>
       <div id="boxPane">
-        <div class="boxbar"><span class="muted">Top:</span><span id="topSel" class="seg"></span><span class="muted" id="boxAge"></span>
-          <span class="muted" style="margin-left:auto">Click a header to sort · hover for definitions · names → Basketball Reference</span></div>
+        <div class="boxbar"><span class="muted">Top:</span><span id="topSel" class="seg"></span><span class="muted" id="boxAge"></span></div>
         <div id="box"></div>
       </div>
     </div>
@@ -264,7 +269,10 @@ const store = {
 };
 
 // user-adjustable refresh intervals, in seconds (settings panel)
-const DEFAULTS = { live: 10, box: 60, others: 60, leaders: 300, breaks: true, lite: true };
+const DEFAULTS = { live: 10, box: 60, others: 60, leaders: 300, breaks: true, lite: true, follow: ['LAL', 'SA', 'PHI'] };
+// ESPN team abbreviations (Spurs are SA, Pelicans NO, Knicks NY, Warriors GS, Jazz UTAH, Wizards WSH)
+const TEAMS = ['ATL', 'BOS', 'BKN', 'CHA', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GS', 'HOU', 'IND', 'LAC', 'LAL', 'MEM',
+  'MIA', 'MIL', 'MIN', 'NO', 'NY', 'OKC', 'ORL', 'PHI', 'PHX', 'POR', 'SAC', 'SA', 'TOR', 'UTAH', 'WSH'];
 // Saved as differences from DEFAULTS (v:2), so changing a default reaches everyone who didn't pick that value.
 // Older saves stored every value; their leaders: 60 was the old default, not a choice.
 const savedSettings = store.get('nbapbp.settings') || {};
@@ -272,7 +280,11 @@ if (!savedSettings.v && savedSettings.leaders === 60) delete savedSettings.leade
 delete savedSettings.v;
 const settings = { ...DEFAULTS, ...savedSettings };
 const saveSettings = () => store.set('nbapbp.settings',
-  Object.fromEntries([['v', 2], ...Object.entries(settings).filter(([k, v]) => v !== DEFAULTS[k])]));
+  Object.fromEntries([['v', 2], ...Object.entries(settings).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(DEFAULTS[k]))]));
+const followed = t => !!t && settings.follow.includes(t.abbr ?? t);
+// games involving a followed team first, otherwise scoreboard order (by tip-off)
+const orderedGames = () => state.games.filter(g => followed(g.away) || followed(g.home))
+  .concat(state.games.filter(g => !followed(g.away) && !followed(g.home)));
 const sec = k => settings[k] * 1000;
 
 const state = {
@@ -333,6 +345,12 @@ function team(c) {
     // scoreboard only: each team's points/rebounds/assists leader (used on home cards until box data loads)
     leaders: (c.leaders || []).filter(L => ['points', 'rebounds', 'assists'].includes(L.name) && L.leaders?.[0])
       .map(L => ({ cat: L.name, value: L.leaders[0].displayValue, name: L.leaders[0].athlete?.shortName || L.leaders[0].athlete?.displayName || '' })) };
+}
+
+// Home team marker ("@ MIA"). spacer=true gives the away team an empty slot of the same width, for alignment.
+function homeMark(t, spacer) {
+  if (t?.homeAway === 'home') { const m = el('span', 'hm', '@'); m.title = 'Home team'; return m; }
+  return spacer ? el('span', 'hm') : document.createTextNode('');
 }
 
 function parseEvent(e) {
@@ -489,13 +507,15 @@ function renderGames() {
   const box = $('#games');
   box.replaceChildren();
   if (!state.games.length) box.append(el('span', 'muted', 'No games'));
-  for (const g of state.games) {
+  for (const g of orderedGames()) {
     const b = el('button', 'g' + (g.state === 'in' ? ' live' : ''));
     b.setAttribute('role', 'listitem');
     b.setAttribute('aria-current', String(state.view === 'game' && g.id === state.gameId));
     for (const t of [g.away, g.home]) {
       const row = el('div', 't');
-      row.append(el('span', null, t?.abbr), el('span', null, g.state !== 'pre' ? t?.score : ''));
+      const nm = el('span');
+      nm.append(homeMark(t, true), t?.abbr || '');
+      row.append(nm, el('span', null, g.state !== 'pre' ? t?.score : ''));
       b.append(row);
     }
     b.append(el('div', 's', g.detail));
@@ -515,7 +535,7 @@ function renderListing() {
   else if (!state.gameId) renderGameList();
 }
 function renderGameList() {
-  $('#gameList').replaceChildren(...(state.games.length ? state.games.map(gameCard) : [el('p', 'muted', 'No games on this day.')]));
+  $('#gameList').replaceChildren(...(state.games.length ? orderedGames().map(gameCard) : [el('p', 'muted', 'No games on this day.')]));
 }
 // game view shows either the card grid or one game; the header strip only appears inside a game
 function syncMode() {
@@ -671,7 +691,9 @@ function renderScore(detail) {
     const d = el('div', 'tm');
     const ab = el('span', 'ab', t.abbr);
     if (t.color) ab.style.setProperty('--c', t.color);
-    const parts = [ab, el('span', 'nm', t.name), el('span', 'pts', gameState === 'pre' ? '–' : t.score)];
+    const who = el('span');
+    who.append(homeMark(t), ab);
+    const parts = [who, el('span', 'nm', t.name), el('span', 'pts', gameState === 'pre' ? '–' : t.score)];
     d.append(...(rev ? parts.reverse() : parts));
     return d;
   };
@@ -927,7 +949,7 @@ function teamTable(T) {
   const ab = el('span', 'ab', T.abbr);
   if (T.color) ab.style.setProperty('--c', T.color);
   const score = teamById(T.id)?.score ?? T.tot.pts;
-  head.append(ab, el('span', 'muted', T.name), el('span', 'pts', String(score)));
+  head.append(homeMark(T), ab, el('span', 'muted', T.name), el('span', 'pts', String(score)));
 
   const wrap = el('div', 'tw');
   wrap.dataset.t = T.id;
@@ -1009,7 +1031,7 @@ function ingestLeaders(gameId, box, final) {
   for (const [T, O] of [[A, B], [B, A]]) {
     for (const p of T.players) {
       if (p.dnp || !(p.min > 0)) continue;
-      rows.push({ g: gameId, tm: T.abbr, op: O.abbr, name: p.name, short: p.short, min: p.min,
+      rows.push({ g: gameId, tm: T.abbr, op: O.abbr, home: T.homeAway === 'home', name: p.name, short: p.short, min: p.min,
         pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk, tov: p.tov, orb: p.orb, pm: p.pm,
         fgm: p.fgm, fga: p.fga, tpm: p.tpm, tpa: p.tpa, ftm: p.ftm, fta: p.fta,
         gmsc: p.a.gmsc, ts: p.a.ts });
@@ -1076,17 +1098,18 @@ function leaderCard(c, rows, n, liveIds) {
   let rank = 0, last = null;
   list.forEach((x, i) => {
     if (x.v !== last) { rank = i + 1; last = x.v; }
-    const r = x.r, li = el('li', 'go');
+    const r = x.r, li = el('li', 'go' + (followed(r.tm) ? ' fol' : ''));
+    const matchup = r.tm + (r.home === false ? ' @ ' : ' vs ') + r.op;
     // the whole row opens the game; the player's name keeps its Basketball Reference link
     li.tabIndex = 0;
-    li.title = 'Open ' + r.tm + ' vs ' + r.op;
+    li.title = 'Open ' + matchup;
     li.onclick = e => { if (!e.target.closest('a')) openGame(r.g); };
     li.onkeydown = e => { if (e.key === 'Enter' && e.target === li) openGame(r.g); };
     const who = el('span');
     const a = el('a', null, r.name);
     a.href = bbref(r.name); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = r.name + ' on Basketball Reference';
     const sub = el('span', 'sub');
-    sub.append(el('span', 'mu', r.tm + ' vs ' + r.op), document.createTextNode(' · ' + r.pts + 'p ' + r.reb + 'r ' + r.ast + 'a · ' + r.fgm + '-' + r.fga + ' FG'));
+    sub.append(el('span', 'mu', matchup), document.createTextNode(' · ' + r.pts + 'p ' + r.reb + 'r ' + r.ast + 'a · ' + r.fgm + '-' + r.fga + ' FG'));
     if (liveIds.has(r.g)) sub.append(el('span', 'dot', ' ● live'));
     who.append(a, sub);
     li.append(el('span', 'rk', String(rank)), who, el('span', 'val', c.f ? c.f(x.v) : String(x.v)), el('span', 'chev', '›'));
@@ -1112,7 +1135,7 @@ function renderHome() {
   $('#homeLeaders').replaceChildren(...(cards.length ? cards
     : [el('p', 'muted', state.games.some(g => g.state !== 'pre') ? 'Loading…' : 'Top performers appear once games start.')]));
   $('#allLeaders').hidden = !cards.length;
-  $('#homeGames').replaceChildren(...(state.games.length ? state.games.map(gameCard) : [el('p', 'muted', 'No games on this day.')]));
+  $('#homeGames').replaceChildren(...(state.games.length ? orderedGames().map(gameCard) : [el('p', 'muted', 'No games on this day.')]));
 }
 
 function gameCard(g) {
@@ -1138,7 +1161,8 @@ function gameCard(g) {
   const tb = el('tbody');
   for (const t of teams) {
     const tr = el('tr'), name = el('td');
-    const ab = el('span', 'ab', t.abbr);
+    const ab = el('span', 'ab');
+    ab.append(homeMark(t, true), t.abbr);
     if (t.color) ab.style.setProperty('--c', t.color);
     name.append(ab);
     if (t.record) name.append(el('span', 'rec', t.record));
@@ -1193,11 +1217,25 @@ function renderSettings() {
     lab.append(cb, document.createTextNode(text));
     box.append(lab);
   }
+  const fol = el('div', 'follow');
+  fol.append(el('span', null, 'Followed teams'));
+  const teams = el('div', 'teams');
+  for (const t of TEAMS) {
+    const b = el('button', null, t);
+    b.setAttribute('aria-pressed', String(settings.follow.includes(t)));
+    b.onclick = () => {
+      settings.follow = settings.follow.includes(t) ? settings.follow.filter(x => x !== t) : [...settings.follow, t];
+      b.setAttribute('aria-pressed', String(settings.follow.includes(t)));
+      saveSettings();
+      renderGames(); renderListing();
+    };
+    teams.append(b);
+  }
+  fol.append(teams);
+  box.append(fol);
   const reset = el('button', null, 'Defaults');
-  reset.onclick = () => { Object.assign(settings, DEFAULTS); saveSettings(); renderSettings(); retime(); };
+  reset.onclick = () => { Object.assign(settings, DEFAULTS); saveSettings(); renderSettings(); renderGames(); renderListing(); retime(); };
   box.append(reset);
-  box.append(el('p', 'hint', 'Lightweight updates fetch only new plays (~2 KB) between box-score refreshes, instead of the whole game (~35 KB) every time. ' +
-    'Breaks: checks every 30s between quarters and in timeouts, every 60s at halftime. Nothing is downloaded while this tab is hidden, and finished games are never re-downloaded.'));
   renderUsage();
 }
 
@@ -1234,7 +1272,7 @@ function renderUsage() {
     : watching ? 'Watching ' + (state.away?.abbr || '') + '–' + (state.home?.abbr || '') + ' live'
     : nLive ? 'Scores only (' + nLive + ' live game' + (nLive === 1 ? '' : 's') + ')' : 'No live games: nothing to refresh';
   const tbl = el('table'), th = el('tr');
-  ['Estimated data', 'per min', 'per hour', 'per game*'].forEach(h => th.append(el('th', null, h)));
+  ['Estimated data', 'per min', 'per hour', 'per game'].forEach(h => th.append(el('th', null, h)));
   const thead = el('thead'); thead.append(th);
   const tb = el('tbody');
   const row = (label, v, cls, sub) => {
@@ -1252,7 +1290,7 @@ function renderUsage() {
   const clr = el('button', null, 'Reset');
   clr.onclick = () => { usage.total = { since: Date.now(), bytes: 0 }; store.set('nbapbp.usage', usage.total); renderUsage(); };
   used.append(clr);
-  box.replaceChildren(tbl, el('p', 'muted', '*A live game lasts about 2¼ hours. Estimates are upper bounds: polling slows during breaks. Compressed sizes, excluding this page itself (~18 KB, downloaded once).'), used);
+  box.replaceChildren(tbl, used);
 }
 
 $('#setClose').onclick = () => $('#gear').click();
