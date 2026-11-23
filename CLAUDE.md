@@ -11,7 +11,7 @@ Static NBA live dashboard served by GitHub Pages at nsanders.me (`CNAME`). Every
 Run tests: `npm test`.
 
 ## Hard constraints
-- Low data: play-by-play polled every 10 s only while the selected game is live; scoreboard every 30 s if any game is live; leaders every 60 s only while that view is open; all polling paused while the tab is hidden; final games are cached in localStorage (`nbapbp.box.<id>`) and never refetched.
+- Low data: play-by-play polled every 10 s only while the selected game is live; scoreboard (all other games, one request) every 60 s if any game is live; leaders every 60 s only while that view is open; all polling paused while the tab is hidden; final games are cached in localStorage (`nbapbp.box.<id>`) and never refetched.
 - Client-side only, static files only.
 - Build DOM with `textContent`/`createElement`; never `innerHTML` with API data (a test greps for it).
 - Dense and readable at 360 px and desktop (≥1000 px shows plays and box side by side); light/dark via `prefers-color-scheme`.

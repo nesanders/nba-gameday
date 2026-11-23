@@ -176,7 +176,8 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
 <script>
 'use strict';
 const API = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
-const MS = { livePbp: 10000, liveSb: 30000, preSb: 300000, prePbp: 60000, leaders: 60000, err: 30000 };
+// selected live game: every 10s. Every other game comes from one scoreboard request, refreshed once a minute.
+const MS = { livePbp: 10000, liveSb: 60000, preSb: 300000, prePbp: 60000, leaders: 60000, err: 30000 };
 const LEADER_CONCURRENCY = 3;
 
 const $ = s => document.querySelector(s);

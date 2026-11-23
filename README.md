@@ -11,7 +11,7 @@ A free, ad-free, low-data NBA live dashboard: **https://nsanders.me**
 
 It's one static `index.html`: no build step, no frameworks, no images, no trackers.
 Data is only fetched while it can change: play-by-play every 10 s while the game you're watching is live,
-the scoreboard every 30 s while any game is live, and nothing while the tab is hidden. Finished games are cached in
+every other game once a minute (one scoreboard request covers them all) while any game is live, and nothing while the tab is hidden. Finished games are cached in
 your browser and never downloaded again.
 
 ## Links

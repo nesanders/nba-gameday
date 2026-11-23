@@ -27,13 +27,15 @@ const routeKey = url => {
 };
 
 export async function boot({ hash = '', routes = defaultRoutes(), storage = {} } = {}) {
-  const calls = [];
+  const calls = [], delays = [];
   let closed = false;
   const dom = new JSDOM(HTML, {
     url: 'https://nsanders.me/' + hash,
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(w) {
+      const st = w.setTimeout.bind(w);
+      w.setTimeout = (fn, ms, ...rest) => { delays.push({ fn: fn?.name, ms }); return st(fn, ms, ...rest); };
       for (const [k, v] of Object.entries(storage)) w.localStorage.setItem(k, JSON.stringify(v));
       w.fetch = async (url, opts) => {
         if (closed) return new Promise(() => {});        // window closed: leave the request hanging
@@ -51,7 +53,7 @@ export async function boot({ hash = '', routes = defaultRoutes(), storage = {} }
   const close = w.close.bind(w);
   w.close = () => { closed = true; close(); };
   const app = {
-    window: w, document: w.document, calls, routes,
+    window: w, document: w.document, calls, delays, routes,
     $: s => w.document.querySelector(s),
     $$: s => [...w.document.querySelectorAll(s)],
     // top-level `const`/`function`s in the page script live in the global lexical scope; eval reaches them

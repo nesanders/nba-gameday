@@ -216,3 +216,16 @@ test('fetches are simple CORS requests (no options that would trigger a prefligh
   await app.settle(() => app.calls.some(c => c.key.startsWith('summary:')));
   for (const c of app.calls) assert.equal(c.opts, undefined, c.key + ' passed fetch options');
 });
+
+test('polling: selected live game every 10s, scoreboard (other games) every 60s', async () => {
+  const app = await boot();
+  await app.settle(() => app.delays.some(d => d.fn === 'loadPBP') && app.delays.some(d => d.fn === 'loadScoreboard'));
+  assert.deepEqual([...new Set(app.delays.filter(d => d.fn === 'loadPBP').map(d => d.ms))], [10000]);
+  assert.deepEqual([...new Set(app.delays.filter(d => d.fn === 'loadScoreboard').map(d => d.ms))], [60000]);
+});
+
+test('polling: a final selected game is not polled at all', async () => {
+  const app = await boot({ hash: '#g=401910029' });
+  await app.settle(() => app.$('#status').textContent === 'Final.');
+  assert.equal(app.delays.filter(d => d.fn === 'loadPBP').length, 0);
+});
