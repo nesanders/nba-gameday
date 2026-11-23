@@ -524,7 +524,7 @@ test('home is the landing page: game cards with line scores, strip hidden', asyn
   assert.deepEqual(Array.from(fin.querySelectorAll('thead th'), t => t.textContent), ['', '1', '2', '3', '4', 'T']);
   const atl = Array.from(fin.querySelectorAll('tbody tr')[1].children, td => td.textContent);
   assert.deepEqual(atl.slice(1), ['29', '22', '23', '33', '107']);
-  assert.match(atl[0], /^ATL\d+-\d+$/);                                 // abbreviation + record
+  assert.match(atl[0], /^@ATL\d+-\d+$/);                                // home marker + abbreviation + record
   const pre = app.$$('#homeGames .gc')[5];
   assert.equal(pre.querySelector('thead'), null);
   assert.match(pre.querySelector('.st').textContent, /PM/);
@@ -645,4 +645,147 @@ test('scoreboard failure on home shows the error, not "no games"', async () => {
   const app = await boot({ hash: '', routes: {} });
   await app.settle(() => /Couldn’t load scoreboard/.test(app.$('#homeStatus').textContent));
   assert.ok(app.$('#homeStatus').classList.contains('err'));
+});
+
+test('home team is marked with "@" on the score header, box headings, strip, cards and leaderboards', async () => {
+  const app = await boot();                                          // OKC @ MIA, MIA at home
+  await app.settle(() => app.$$('table.bx').length === 2);
+  const marks = sel => app.$$(sel + ' .hm').filter(m => m.textContent === '@');
+  assert.equal(marks('#score').length, 1);
+  assert.equal(marks('#score')[0].nextSibling.textContent, 'MIA');
+  assert.equal(marks('#score')[0].title, 'Home team');
+  assert.deepEqual(app.$$('.th').map(h => h.textContent.startsWith('@')), app.$$('.th').map(h => h.querySelector('.ab').textContent === 'MIA'));
+  const tile = app.$('#games .g[aria-current=true]');
+  assert.equal(marks('#games .g[aria-current=true]').length, 1);
+  assert.equal(tile.querySelectorAll('.hm').length, 2);              // away row has an empty spacer for alignment
+  assert.match(tile.textContent, /^OKC58@MIA70/);
+  app.$('#logo').click();
+  await app.settle(() => app.$$('#homeGames .gc').length === 7 && app.$$('#homeLeaders li.go').length > 0);
+  for (const card of app.$$('#homeGames .gc')) assert.equal(card.querySelectorAll('.ab .hm').length, 2);
+  assert.equal(app.$$('#homeGames .gc .ab .hm').filter(m => m.textContent === '@').length, 7);
+  // leaderboards: away players read "X @ Y", home players "Y vs X"
+  const subs = app.$$('#homeLeaders .mu').map(m => m.textContent);
+  assert.ok(subs.includes('ATL vs DET') && subs.includes('DET @ ATL'), subs.join(', '));
+});
+
+// ---------------------------------------------------------------- followed teams
+const firstTeams = (app, sel) => app.$$(sel).map(c => c.textContent.match(/[A-Z]{2,4}/)[0]);
+
+test('followed teams default to LAL, SA, PHI and are saved only when changed', async () => {
+  const app = await boot({ hash: '' });
+  await app.settle(() => /updated/.test(app.$('#homeStatus').textContent));
+  assert.deepEqual([...app.eval('settings.follow')], ['LAL', 'SA', 'PHI']);
+  app.$('#gear').click();
+  const on = app.$$('.follow .teams button').filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent);
+  assert.deepEqual(on, ['LAL', 'PHI', 'SA']);                          // shown in league order
+  assert.equal(app.$$('.follow .teams button').length, 30);
+  assert.equal(app.window.localStorage.getItem('nbapbp.settings'), null);
+});
+
+test('games with a followed team come first in the strip, home cards and games grid', async () => {
+  const app = await boot({ storage: { 'nbapbp.settings': { v: 2, follow: ['MIA', 'UTAH'] } } });
+  await app.settle(() => app.$$('#games .g').length === 7);
+  assert.deepEqual(firstTeams(app, '#games .g').slice(0, 3), ['OKC', 'DAL', 'DET']);   // OKC@MIA, DAL@UTAH, then the rest in order
+  app.$('#navGame').click();
+  await app.settle(() => app.$$('#gameList .gc').length === 7);
+  assert.deepEqual(firstTeams(app, '#gameList .gc .ls .ab').filter((_, i) => i % 2 === 0).slice(0, 3), ['OKC', 'DAL', 'DET']);
+  app.$('#logo').click();
+  assert.deepEqual(firstTeams(app, '#homeGames .gc .ls .ab').filter((_, i) => i % 2 === 0).slice(0, 2), ['OKC', 'DAL']);
+});
+
+test('followed players are highlighted on leaderboards; toggling a team updates order and highlight', async () => {
+  const app = await boot({ hash: '#v=leaders', storage: { 'nbapbp.settings': { v: 2, follow: ['MIA'] } } });
+  await app.settle(() => app.$$('#leaders .card').length === 12);
+  const fol = app.$$('#leaders li.fol');
+  assert.ok(fol.length > 0 && fol.every(li => /^MIA /.test(li.querySelector('.mu').textContent)));
+  assert.ok(app.$$('#leaders li:not(.fol)').every(li => !/^MIA /.test(li.querySelector('.mu').textContent)));
+  // follow ATL from the panel: its players light up and its game moves first in the strip
+  app.$('#gear').click();
+  app.$$('.follow .teams button').find(b => b.textContent === 'ATL').click();
+  assert.ok(app.$$('#leaders li.fol').some(li => /^ATL /.test(li.querySelector('.mu').textContent)));
+  assert.equal(firstTeams(app, '#games .g')[0], 'DET');                // DET@ATL (first by tip-off among followed games)
+  assert.deepEqual({ ...JSON.parse(app.window.localStorage.getItem('nbapbp.settings')) }, { v: 2, follow: ['MIA', 'ATL'] });
+  // unfollow everything: stored as an empty list, not reverted to the defaults
+  for (const t of ['MIA', 'ATL']) app.$$('.follow .teams button').find(b => b.textContent === t).click();
+  assert.equal(app.$$('#leaders li.fol').length, 0);
+  assert.deepEqual([...JSON.parse(app.window.localStorage.getItem('nbapbp.settings')).follow], []);
+});
+
+// ---------------------------------------------------------------- shareable URLs
+test('game URL: play filter, quarter, order and box sort are written as they change', async () => {
+  const app = await boot();
+  await app.settle(() => app.$$('#filters button').length === 4 && app.$$('table.bx').length === 2);
+  const hash = () => app.window.location.hash, n = app.window.history.length;
+  app.$$('#filters button').find(b => b.textContent === 'MIA').click();
+  assert.equal(hash(), '#g=401910030&pf=MIA');
+  app.$('#period').value = '2'; app.$('#period').dispatchEvent(new app.window.Event('change'));
+  app.$('#order').click();
+  assert.equal(hash(), '#g=401910030&pf=MIA&pq=2&po=old');
+  Array.from(app.$('table.bx thead tr').children).find(th => th.textContent === 'PTS').click();
+  assert.equal(hash(), '#g=401910030&pf=MIA&pq=2&po=old&sort=PTS');
+  Array.from(app.$('table.bx thead tr').children).find(th => th.textContent === 'PTS').click();
+  assert.equal(hash(), '#g=401910030&pf=MIA&pq=2&po=old&sort=PTS&dir=asc');
+  app.$$('#filters button').find(b => b.textContent === 'Scoring').click();
+  assert.match(hash(), /pf=scoring/);
+  assert.equal(app.window.history.length, n, 'no history entries for filters or sorts');
+  // opening another game starts from its defaults again (the box sort is kept: it is a column preference)
+  app.$('#games .g:not([aria-current=true])').click();
+  await app.settle(() => !/401910030/.test(hash()));
+  assert.doesNotMatch(hash(), /pf=|pq=/);
+});
+
+test('game URL: a shared link restores filter, quarter, order and box sort', async () => {
+  const app = await boot({ hash: '#g=401910030&pf=MIA&pq=1&po=old&sort=PTS&dir=asc' });
+  await app.settle(() => app.$$('#list li').length > 0 && app.$$('table.bx').length === 2);
+  assert.equal(app.$('#filters button[aria-pressed=true]').textContent, 'MIA');
+  assert.equal(app.$('#period').value, '1');
+  assert.equal(app.$('#order').textContent, 'Oldest first');
+  assert.ok(app.$$('#list li .tm').every(t => t.textContent === 'MIA'));
+  assert.ok(app.$$('#list .per h2').every(h => h.textContent === '1st Quarter'));
+  const clocks = app.$$('#list li .clk').map(c => c.textContent);
+  assert.equal(clocks[0] >= clocks.at(-1), true, 'oldest first: clock counts down');
+  const th = app.$('table.bx th[aria-sort]');
+  assert.deepEqual([th.textContent, th.getAttribute('aria-sort')], ['PTS', 'ascending']);
+  assert.equal(app.window.location.hash, '#g=401910030&pf=MIA&pq=1&po=old&sort=PTS&dir=asc');
+  // Back/Forward re-apply the URL: going back to a plain game link resets the view state
+  app.$('#logo').click();
+  app.window.history.back();
+  await app.settle(() => !app.$('#gameView').hidden && app.$('#filters button[aria-pressed=true]')?.textContent === 'MIA');
+});
+
+test('game cards mark the winner of finished games (ESPN flag, or the higher score without it)', async () => {
+  const check = async routes => {
+    const app = await boot({ hash: '#v=game', routes });
+    await app.settle(() => app.$$('#gameList .gc').length === 7);
+    const fin = app.$$('#gameList .gc')[0], rows = fin.querySelectorAll('.ls tbody tr');
+    assert.deepEqual(Array.from(rows, r => [r.querySelector('.ab').textContent.replace('@', ''), r.className]), [['DET', 'lose'], ['ATL', 'win']]);
+    assert.equal(rows[1].title, 'Winner');
+    // live and upcoming games mark nobody
+    assert.equal(app.$$('#gameList .gc').slice(1).filter(c => c.querySelector('tr.win, tr.lose')).length, 0);
+  };
+  await check(defaultRoutes());
+  const sb = fixture('scoreboard');
+  for (const e of sb.events) for (const c of e.competitions[0].competitors) delete c.winner;
+  await check({ ...defaultRoutes(), scoreboard: sb });
+});
+
+test('date picker: the date label opens a calendar; picking a day loads it; picking today returns to live', async () => {
+  const routes = defaultRoutes();
+  routes['scoreboard:20261105'] = datedBoard('20261105');
+  const app = await boot({ hash: '', routes });
+  await app.settle(() => app.$$('#homeGames .gc').length === 7);
+  const pick = app.$('#dayPick'), pickDay = v => { pick.value = v; pick.dispatchEvent(new app.window.Event('change')); };
+  assert.equal(pick.type, 'date');
+  assert.equal(pick.value, '2026-11-22');                              // ESPN's "today" from the scoreboard
+  app.$('#day').click();                                               // jsdom has no showPicker: falls back to focus
+  assert.equal(app.document.activeElement, pick);
+  pickDay('2026-11-05');
+  await app.settle(() => app.calls.some(c => c.key === 'scoreboard:20261105') && /5/.test(app.$('#day').textContent));
+  assert.match(app.window.location.hash, /d=20261105/);
+  assert.equal(app.$('#today').hidden, false);
+  assert.equal(pick.value, '2026-11-05');
+  pickDay('2026-11-22');                                               // today again: no date in the URL
+  await app.settle(() => app.$('#day').textContent === 'Today' && app.window.location.hash === '');
+  app.window.history.back();                                           // each pick is a Back step
+  await app.settle(() => /d=20261105/.test(app.window.location.hash) && app.$('#day').textContent !== 'Today');
 });

@@ -19,8 +19,10 @@ export function defaultRoutes() {
   return r;
 }
 
+// Same-origin data files (the page fetches them relative: data/season-best.json) route as `data:<file>`.
 const routeKey = url => {
-  const u = new URL(url);
+  const u = new URL(url, 'https://nsanders.me/nba-gameday/');
+  if (u.hostname === 'nsanders.me' && u.pathname.includes('/data/')) return 'data:' + u.pathname.split('/data/')[1];
   const core = u.pathname.match(/\/events\/(\d+)\/competitions\/\d+\/(plays|status)$/);
   if (core) return 'core:' + core[2] + ':' + core[1];
   if (u.pathname.endsWith('/scoreboard')) return 'scoreboard' + (u.searchParams.get('dates') ? ':' + u.searchParams.get('dates') : '');
@@ -53,7 +55,7 @@ export async function boot({ hash = '#g=401910030', routes = defaultRoutes(), st
         const name = routes[key];
         if (!name) return { ok: false, status: 404, json: async () => ({}) };
         let body = typeof name === 'string' ? fixture(name) : name;
-        if (key.startsWith('core:plays:')) body = page(body, new URL(String(url)).searchParams);
+        if (key.startsWith('core:plays:')) body = page(body, new URL(String(url), 'https://nsanders.me/').searchParams);
         const text = JSON.stringify(body);
         return { ok: true, status: 200, headers: { get: h => (h.toLowerCase() === 'content-length' ? String(Math.round(text.length / 8)) : null) },
           text: () => (closed ? new Promise(() => {}) : Promise.resolve(text)) };

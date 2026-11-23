@@ -7,8 +7,8 @@
 <title>NBA Gameday</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
 <style>
-:root{--bg:#fff;--fg:#151515;--muted:#6b6b6b;--line:#e4e4e4;--card:#f4f4f5;--accent:#1d6fe0;--live:#d42020;--hl:#fff3b8;--hh:0px}
-@media (prefers-color-scheme:dark){:root{--bg:#0f0f10;--fg:#ececec;--muted:#9a9a9a;--line:#2a2a2c;--card:#1a1a1c;--accent:#6ea8ff;--live:#ff5c5c;--hl:#4a4010}}
+:root{--bg:#fff;--fg:#151515;--muted:#6b6b6b;--line:#e4e4e4;--card:#f4f4f5;--accent:#1d6fe0;--live:#d42020;--hl:#fff3b8;--fol:#eaf1fd;--hh:0px}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0f10;--fg:#ececec;--muted:#9a9a9a;--line:#2a2a2c;--card:#1a1a1c;--accent:#6ea8ff;--live:#ff5c5c;--hl:#4a4010;--fol:#16233a}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}   /* display rules elsewhere must never override the hidden attribute */
 body{margin:0;font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg)}
@@ -31,10 +31,16 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .bar h1 a:hover{text-decoration:none}
 .bar .sp{flex:1}
 .bar .sm{display:none}
-#day{font-variant-numeric:tabular-nums;min-width:6.2em;text-align:center;color:var(--muted)}
+#day{font-variant-numeric:tabular-nums;min-width:6.2em;text-align:center;color:var(--muted);background:none;border-color:transparent}
+#day:hover,#day:focus-visible{border-color:var(--line);color:var(--fg)}
+/* native date picker, opened from the #day button; invisible but rendered so the picker anchors under the label */
+.daywrap{position:relative;display:inline-flex}
+#dayPick{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none;border:0;padding:0}
 #games{display:flex;gap:.4rem;overflow-x:auto;padding:0 0 .45rem;scrollbar-width:thin}
 .g{flex:0 0 auto;min-width:118px;text-align:left;padding:.3rem .5rem;font-variant-numeric:tabular-nums;font-size:13px}
 .g .t{display:flex;justify-content:space-between;gap:.6rem}
+.hm{display:inline-block;width:.85em;color:var(--muted);font-weight:400;font-size:.9em}
+.tm .hm,.th .hm{width:auto;margin-right:-.3rem}
 .g .s{font-size:11px;color:var(--muted)}
 .g.live .s{color:var(--live);font-weight:600}
 .g[aria-current=true]{outline:2px solid var(--accent);outline-offset:-1px}
@@ -43,10 +49,10 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 #settings .sethead{display:flex;align-items:center;justify-content:space-between;margin:0 0 .45rem}
 #settings .sethead h2{font-size:13px;margin:0}
 #settings select,#settings button{background:var(--bg)}
+#settings button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
 .setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.35rem .9rem;align-items:center}
 .setgrid label{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
 .setgrid label.ck{justify-content:flex-start}
-.setgrid .hint{grid-column:1/-1;font-size:11.5px;color:var(--muted);margin:0}
 #usage{margin-top:.55rem;font-variant-numeric:tabular-nums}
 #usage table{font-size:12.5px;margin:.25rem 0}
 #usage th,#usage td{padding:.15rem .5rem .15rem 0;border-bottom:1px solid var(--line);background:none;cursor:default}
@@ -56,7 +62,7 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .setgrid>button{justify-self:start}
 #usage p{margin:.25rem 0}
 #usage .now{font-weight:600}
-@media (max-width:520px){.bar .lt{display:none}.bar .lg{display:none}.bar .sm{display:inline}.bar{gap:.3rem}#day{min-width:4.6em}}
+@media (max-width:520px){.bar .lt{display:none}.bar .lg{display:none}.bar .sm{display:inline}.bar{gap:.2rem}.bar button{padding:.2rem .35rem;font-size:13px}#day{min-width:3.6em}}
 
 main{padding-top:.6rem;padding-bottom:1.5rem}
 .status{font-size:12px;color:var(--muted);margin:.3rem 0;min-height:1em}
@@ -146,7 +152,11 @@ th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
 .ls th:first-child,.ls td:first-child{text-align:left;width:100%}
 .ls .ab{font-weight:700;border-left:3px solid var(--c,transparent);padding-left:.3rem}
 .ls .rec{color:var(--muted);font-size:11px;margin-left:.35rem;font-weight:400}
-.ls td.t{font-weight:700}
+.ls td.t{font-weight:700;position:relative;padding-right:.9em}
+/* finished games: the loser's row is muted, the winner's total gets a small pointer */
+.ls tr.lose td{color:var(--muted)}
+.ls tr.lose td.t{font-weight:400}
+.ls tr.win td.t::after{content:"\25C2";position:absolute;right:.05em;font-size:.8em;color:var(--fg)}
 .ls th:not(:first-child),.ls td:not(:first-child){min-width:2em}
 .ls tr:last-child td{border-bottom:0}
 .gc .pl{display:grid;grid-template-columns:2.7em 1fr;gap:.1rem .3rem;font-size:12px;margin-top:.35rem;line-height:1.35}
@@ -162,7 +172,31 @@ th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
 .card .val{font-weight:700;font-variant-numeric:tabular-nums}
 .card .sub{display:block;font-size:11px;color:var(--muted)}
 .card li.go{grid-template-columns:1.3em 1fr auto .7em;cursor:pointer;border-radius:4px}
+.card li.fol{background:var(--fol)}
+
+/* season tables */
+#seasonView .controls{gap:.4rem}
+#seasonView input[type=search]{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:.2rem .5rem;width:9em}
+#seasonView .ck{display:inline-flex;align-items:center;gap:.25rem;font-size:13px}
+.stw{overflow-x:auto;border:1px solid var(--line);border-radius:8px;scrollbar-width:thin}
+table.st{min-width:100%}
+.st th,.st td{padding:.2rem .4rem}
+.st th:first-child,.st td:first-child{position:sticky;left:0;z-index:1;text-align:left;background:var(--bg);max-width:12em;overflow:hidden;text-overflow:ellipsis}
+.st thead th{cursor:pointer;user-select:none}
+.st thead th:first-child{background:var(--card)}
+.st thead th:hover{color:var(--fg)}
+.st thead th[aria-sort]{color:var(--accent);box-shadow:inset 0 -2px var(--accent)}
+.st td.l,.st th.l{text-align:left}
+.st td.k{font-weight:700}
+.st td .rk{display:inline-block;min-width:1.9em;color:var(--muted);font-size:11px}
+.st td .mu{color:var(--muted)}
+.st tbody tr.go{cursor:pointer}
+.st tbody tr:hover td{background:var(--card)}
+.st tbody tr.fol td{background:var(--fol)}
 .card li.go:hover,.card li.go:focus-visible{background:var(--card);outline:none}
+.follow{grid-column:1/-1}
+.follow .teams{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.25rem}
+.follow .teams button{min-width:3.4em;padding:.15rem .35rem;font-size:12px}
 .card li.go:hover .mu,.card li.go:focus-visible .mu{color:var(--accent);text-decoration:underline}
 .card .chev{color:var(--muted);font-size:15px;line-height:1}
 .card li.go:hover .chev{color:var(--accent)}
@@ -179,10 +213,11 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
       <span class="seg" role="group" aria-label="View">
         <button id="navGame" aria-pressed="true">Games</button>
         <button id="navLeaders" aria-pressed="false"><span class="lg">Top performers</span><span class="sm">Leaders</span></button>
+        <button id="navSeason" aria-pressed="false">Season</button>
       </span>
       <span class="sp"></span>
       <button id="prev" aria-label="Previous day">‹</button>
-      <span id="day">Today</span>
+      <span class="daywrap"><button id="day" aria-label="Choose a date" title="Choose a date">Today</button><input type="date" id="dayPick" tabindex="-1" aria-hidden="true"></span>
       <button id="next" aria-label="Next day">›</button>
       <button id="today" hidden>Today</button>
       <button id="gear" aria-label="Settings" aria-expanded="false" aria-controls="settings" title="Refresh speed &amp; data usage">⚙</button>
@@ -218,8 +253,7 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
         <p class="empty" id="empty" hidden>No plays yet.</p>
       </div>
       <div id="boxPane">
-        <div class="boxbar"><span class="muted">Top:</span><span id="topSel" class="seg"></span><span class="muted" id="boxAge"></span>
-          <span class="muted" style="margin-left:auto">Click a header to sort · hover for definitions · names → Basketball Reference</span></div>
+        <div class="boxbar"><span class="muted">Top:</span><span id="topSel" class="seg"></span><span class="muted" id="boxAge"></span></div>
         <div id="box"></div>
       </div>
     </div>
@@ -236,6 +270,22 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
       <h2 class="hh">Games</h2>
       <div id="homeGames"></div>
     </div>
+  </section>
+
+  <!-- ===== season view ===== -->
+  <section id="seasonView" hidden>
+    <div class="controls">
+      <span class="seg" id="seasonTabs" role="tablist">
+        <button data-s="avg" aria-pressed="true">Per game</button>
+        <button data-s="pg" aria-pressed="false">Player games</button>
+        <button data-s="tg" aria-pressed="false">Team games</button>
+      </span>
+      <select id="seasonTeam" aria-label="Team"></select>
+      <input id="seasonFind" type="search" placeholder="Player" aria-label="Find a player" autocomplete="off">
+      <label class="ck" id="seasonAllWrap"><input type="checkbox" id="seasonAll"> All players</label>
+    </div>
+    <p class="status" id="seasonStatus"></p>
+    <div id="seasonTable"></div>
   </section>
 
   <!-- ===== top performers view ===== -->
@@ -264,7 +314,10 @@ const store = {
 };
 
 // user-adjustable refresh intervals, in seconds (settings panel)
-const DEFAULTS = { live: 10, box: 60, others: 60, leaders: 300, breaks: true, lite: true };
+const DEFAULTS = { live: 10, box: 60, others: 60, leaders: 300, breaks: true, lite: true, follow: ['LAL', 'SA', 'PHI'] };
+// ESPN team abbreviations (Spurs are SA, Pelicans NO, Knicks NY, Warriors GS, Jazz UTAH, Wizards WSH)
+const TEAMS = ['ATL', 'BOS', 'BKN', 'CHA', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GS', 'HOU', 'IND', 'LAC', 'LAL', 'MEM',
+  'MIA', 'MIL', 'MIN', 'NO', 'NY', 'OKC', 'ORL', 'PHI', 'PHX', 'POR', 'SAC', 'SA', 'TOR', 'UTAH', 'WSH'];
 // Saved as differences from DEFAULTS (v:2), so changing a default reaches everyone who didn't pick that value.
 // Older saves stored every value; their leaders: 60 was the old default, not a choice.
 const savedSettings = store.get('nbapbp.settings') || {};
@@ -272,7 +325,11 @@ if (!savedSettings.v && savedSettings.leaders === 60) delete savedSettings.leade
 delete savedSettings.v;
 const settings = { ...DEFAULTS, ...savedSettings };
 const saveSettings = () => store.set('nbapbp.settings',
-  Object.fromEntries([['v', 2], ...Object.entries(settings).filter(([k, v]) => v !== DEFAULTS[k])]));
+  Object.fromEntries([['v', 2], ...Object.entries(settings).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(DEFAULTS[k]))]));
+const followed = t => !!t && settings.follow.includes(t.abbr ?? t);
+// games involving a followed team first, otherwise scoreboard order (by tip-off)
+const orderedGames = () => state.games.filter(g => followed(g.away) || followed(g.home))
+  .concat(state.games.filter(g => !followed(g.away) && !followed(g.home)));
 const sec = k => settings[k] * 1000;
 
 const state = {
@@ -304,10 +361,10 @@ let sections = new Map(), periodCount = 0, filterKey = '';
 const SIZE = { summary: 34000, plays: 2300, status: 300, scoreboard: 13000, ...(store.get('nbapbp.sizes') || {}) };
 const usage = { bytes: 0, requests: 0, total: store.get('nbapbp.usage') || { since: Date.now(), bytes: 0 } };
 
-async function getJSON(url, kind) {
+async function getJSON(url, kind, cache = 'no-store') {
   // 'no-store': responses have no ETag/Last-Modified (no 304s possible) and the core API allows
   // stale-while-revalidate, so a cached copy could be served stale. (Cache modes don't trigger a CORS preflight.)
-  const r = await fetch(url, { cache: 'no-store' });
+  const r = await fetch(url, { cache });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const text = await r.text();
   // Content-Length is CORS-safelisted; for gzip responses it is the on-the-wire size. Fallback: typical ~9:1 gzip ratio.
@@ -330,9 +387,16 @@ function team(c) {
     color: t.color ? '#' + t.color : null, score: c.score ?? '', homeAway: c.homeAway,
     lines: (c.linescores || []).map(l => l.displayValue ?? String(l.value ?? '')),
     record: c.records?.[0]?.summary || '',
+    winner: c.winner === true,
     // scoreboard only: each team's points/rebounds/assists leader (used on home cards until box data loads)
     leaders: (c.leaders || []).filter(L => ['points', 'rebounds', 'assists'].includes(L.name) && L.leaders?.[0])
       .map(L => ({ cat: L.name, value: L.leaders[0].displayValue, name: L.leaders[0].athlete?.shortName || L.leaders[0].athlete?.displayName || '' })) };
+}
+
+// Home team marker ("@ MIA"). spacer=true gives the away team an empty slot of the same width, for alignment.
+function homeMark(t, spacer) {
+  if (t?.homeAway === 'home') { const m = el('span', 'hm', '@'); m.title = 'Home team'; return m; }
+  return spacer ? el('span', 'hm') : document.createTextNode('');
 }
 
 function parseEvent(e) {
@@ -458,6 +522,7 @@ async function loadScoreboard() {
     // next UTC day), so the requested date is the only reliable label. `day` is present for "today".
     state.dayDate = state.date ? state.date.replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3')
       : d.day?.date || d.events?.[0]?.date?.slice(0, 10) || null;
+    if (!state.date && state.dayDate) state.todayDate = state.dayDate;
     state.sbError = false;
     state.games = (d.events || []).map(parseEvent);
     // the watched game is refreshed more often than the scoreboard: keep our fresher score/clock on its tile
@@ -482,6 +547,7 @@ function renderDay() {
   let label = 'Today';
   if (state.date && state.dayDate) label = new Date(state.dayDate + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   $('#day').textContent = label;
+  $('#dayPick').value = state.dayDate || '';
   $('#today').hidden = !state.date;
 }
 
@@ -489,13 +555,15 @@ function renderGames() {
   const box = $('#games');
   box.replaceChildren();
   if (!state.games.length) box.append(el('span', 'muted', 'No games'));
-  for (const g of state.games) {
+  for (const g of orderedGames()) {
     const b = el('button', 'g' + (g.state === 'in' ? ' live' : ''));
     b.setAttribute('role', 'listitem');
     b.setAttribute('aria-current', String(state.view === 'game' && g.id === state.gameId));
     for (const t of [g.away, g.home]) {
       const row = el('div', 't');
-      row.append(el('span', null, t?.abbr), el('span', null, g.state !== 'pre' ? t?.score : ''));
+      const nm = el('span');
+      nm.append(homeMark(t, true), t?.abbr || '');
+      row.append(nm, el('span', null, g.state !== 'pre' ? t?.score : ''));
       b.append(row);
     }
     b.append(el('div', 's', g.detail));
@@ -508,19 +576,21 @@ function renderGames() {
 // ---------------------------------------------------------------- game view
 // "Listing" pages show every game: home, Top performers, and the Games view before a game is opened.
 // They share the per-game box data loop (loadLeaders).
-const listing = () => state.view !== 'game' || !state.gameId;
+const listing = () => state.view === 'home' || state.view === 'leaders' || (state.view === 'game' && !state.gameId);
 function renderListing() {
   if (state.view === 'home') renderHome();
   else if (state.view === 'leaders') renderLeaders();
   else if (!state.gameId) renderGameList();
 }
 function renderGameList() {
-  $('#gameList').replaceChildren(...(state.games.length ? state.games.map(gameCard) : [el('p', 'muted', 'No games on this day.')]));
+  $('#gameList').replaceChildren(...(state.games.length ? orderedGames().map(gameCard) : [el('p', 'muted', 'No games on this day.')]));
 }
 // game view shows either the card grid or one game; the header strip only appears inside a game
 function syncMode() {
   $('#gameView').dataset.mode = state.gameId ? 'game' : 'list';
-  $('#games').hidden = state.view === 'home' || (state.view === 'game' && !state.gameId);
+  $('#games').hidden = state.view === 'home' || state.view === 'season' || (state.view === 'game' && !state.gameId);
+  ['#prev', '#day', '#next'].forEach(x => ($(x).hidden = state.view === 'season'));   // season stats have no date
+  if (state.view === 'season') $('#today').hidden = true; else renderDay();
   measureHeader();
 }
 // user navigation to a game: a new history entry, so the browser Back button returns to where they were
@@ -671,7 +741,9 @@ function renderScore(detail) {
     const d = el('div', 'tm');
     const ab = el('span', 'ab', t.abbr);
     if (t.color) ab.style.setProperty('--c', t.color);
-    const parts = [ab, el('span', 'nm', t.name), el('span', 'pts', gameState === 'pre' ? '–' : t.score)];
+    const who = el('span');
+    who.append(homeMark(t), ab);
+    const parts = [who, el('span', 'nm', t.name), el('span', 'pts', gameState === 'pre' ? '–' : t.score)];
     d.append(...(rev ? parts.reverse() : parts));
     return d;
   };
@@ -760,6 +832,10 @@ function updatePeriods() {
 function renderFilters() {
   const { away, home } = state;
   const key = (away?.id || '') + '|' + (home?.id || '');
+  if (state.filterAbbr) {
+    const t = [away, home].find(x => x?.abbr === state.filterAbbr);
+    if (t) { state.filter = t.id; state.filterAbbr = null; }
+  }
   if (key === filterKey) return;
   filterKey = key;
   const opts = [['all', 'All'], ['scoring', 'Scoring']];
@@ -771,7 +847,7 @@ function renderFilters() {
     const b = el('button', null, label);
     b.dataset.v = v;
     b.setAttribute('aria-pressed', String(state.filter === v));
-    b.onclick = () => { state.filter = v; box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === v))); renderPlays(); };
+    b.onclick = () => { state.filter = v; box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === v))); renderPlays(); writeHash(); };
     box.append(b);
   }
 }
@@ -905,9 +981,11 @@ function sortPlayers(ps) {
     return gmsc(b) - gmsc(a);                       // ties: higher Game Score first
   });
 }
+const boxDefaultDir = k => (k === 'Player' ? 1 : -1);
 function setSort(key) {
-  state.sort = state.sort.key === key ? { key, dir: -state.sort.dir } : { key, dir: key === 'Player' ? 1 : -1 };
+  state.sort = state.sort.key === key ? { key, dir: -state.sort.dir } : { key, dir: boxDefaultDir(key) };
   renderBox();
+  writeHash();
   const th = [...$('#box').querySelectorAll('.bx thead th')].find(t => t.dataset.k === key);   // keep keyboard focus
   if (th) th.focus();
 }
@@ -927,7 +1005,7 @@ function teamTable(T) {
   const ab = el('span', 'ab', T.abbr);
   if (T.color) ab.style.setProperty('--c', T.color);
   const score = teamById(T.id)?.score ?? T.tot.pts;
-  head.append(ab, el('span', 'muted', T.name), el('span', 'pts', String(score)));
+  head.append(homeMark(T), ab, el('span', 'muted', T.name), el('span', 'pts', String(score)));
 
   const wrap = el('div', 'tw');
   wrap.dataset.t = T.id;
@@ -1009,7 +1087,7 @@ function ingestLeaders(gameId, box, final) {
   for (const [T, O] of [[A, B], [B, A]]) {
     for (const p of T.players) {
       if (p.dnp || !(p.min > 0)) continue;
-      rows.push({ g: gameId, tm: T.abbr, op: O.abbr, name: p.name, short: p.short, min: p.min,
+      rows.push({ g: gameId, tm: T.abbr, op: O.abbr, home: T.homeAway === 'home', name: p.name, short: p.short, min: p.min,
         pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk, tov: p.tov, orb: p.orb, pm: p.pm,
         fgm: p.fgm, fga: p.fga, tpm: p.tpm, tpa: p.tpa, ftm: p.ftm, fta: p.fta,
         gmsc: p.a.gmsc, ts: p.a.ts });
@@ -1076,17 +1154,18 @@ function leaderCard(c, rows, n, liveIds) {
   let rank = 0, last = null;
   list.forEach((x, i) => {
     if (x.v !== last) { rank = i + 1; last = x.v; }
-    const r = x.r, li = el('li', 'go');
+    const r = x.r, li = el('li', 'go' + (followed(r.tm) ? ' fol' : ''));
+    const matchup = r.tm + (r.home === false ? ' @ ' : ' vs ') + r.op;
     // the whole row opens the game; the player's name keeps its Basketball Reference link
     li.tabIndex = 0;
-    li.title = 'Open ' + r.tm + ' vs ' + r.op;
+    li.title = 'Open ' + matchup;
     li.onclick = e => { if (!e.target.closest('a')) openGame(r.g); };
     li.onkeydown = e => { if (e.key === 'Enter' && e.target === li) openGame(r.g); };
     const who = el('span');
     const a = el('a', null, r.name);
     a.href = bbref(r.name); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = r.name + ' on Basketball Reference';
     const sub = el('span', 'sub');
-    sub.append(el('span', 'mu', r.tm + ' vs ' + r.op), document.createTextNode(' · ' + r.pts + 'p ' + r.reb + 'r ' + r.ast + 'a · ' + r.fgm + '-' + r.fga + ' FG'));
+    sub.append(el('span', 'mu', matchup), document.createTextNode(' · ' + r.pts + 'p ' + r.reb + 'r ' + r.ast + 'a · ' + r.fgm + '-' + r.fga + ' FG'));
     if (liveIds.has(r.g)) sub.append(el('span', 'dot', ' ● live'));
     who.append(a, sub);
     li.append(el('span', 'rk', String(rank)), who, el('span', 'val', c.f ? c.f(x.v) : String(x.v)), el('span', 'chev', '›'));
@@ -1112,7 +1191,7 @@ function renderHome() {
   $('#homeLeaders').replaceChildren(...(cards.length ? cards
     : [el('p', 'muted', state.games.some(g => g.state !== 'pre') ? 'Loading…' : 'Top performers appear once games start.')]));
   $('#allLeaders').hidden = !cards.length;
-  $('#homeGames').replaceChildren(...(state.games.length ? state.games.map(gameCard) : [el('p', 'muted', 'No games on this day.')]));
+  $('#homeGames').replaceChildren(...(state.games.length ? orderedGames().map(gameCard) : [el('p', 'muted', 'No games on this day.')]));
 }
 
 function gameCard(g) {
@@ -1137,8 +1216,12 @@ function gameCard(g) {
   }
   const tb = el('tbody');
   for (const t of teams) {
-    const tr = el('tr'), name = el('td');
-    const ab = el('span', 'ab', t.abbr);
+    // winner: ESPN's flag, or the higher score once the game is final
+    const won = g.state === 'post' && (t.winner || (!teams.some(x => x.winner) && +t.score > Math.max(...teams.filter(x => x !== t).map(x => +x.score))));
+    const tr = el('tr', g.state === 'post' ? (won ? 'win' : 'lose') : null), name = el('td');
+    if (g.state === 'post') tr.title = won ? 'Winner' : '';
+    const ab = el('span', 'ab');
+    ab.append(homeMark(t, true), t.abbr);
     if (t.color) ab.style.setProperty('--c', t.color);
     name.append(ab);
     if (t.record) name.append(el('span', 'rec', t.record));
@@ -1164,6 +1247,210 @@ function gameCard(g) {
   if (pl.childNodes.length) card.append(pl);
   return card;
 }
+
+// ---------------------------------------------------------------- season: per-game leaders and best games
+// Data files are built nightly by scripts/build-season.mjs (GitHub Action) and served next to this page.
+// The metric definitions below must match PMETRICS/TMETRICS in that script (a test compares them).
+const SEASON_P = {
+  gmsc: { best: -1, v: r => r.pts + 0.4 * r.fgm - 0.7 * r.fga - 0.4 * (r.fta - r.ftm) + 0.7 * r.orb + 0.3 * r.drb + r.stl + 0.7 * r.ast + 0.7 * r.blk - 0.4 * r.pf - r.tov },
+  min: { best: -1, v: r => r.min }, pts: { best: -1, v: r => r.pts }, reb: { best: -1, v: r => r.orb + r.drb },
+  ast: { best: -1, v: r => r.ast }, stl: { best: -1, v: r => r.stl }, blk: { best: -1, v: r => r.blk },
+  tov: { best: -1, v: r => r.tov }, fgm: { best: -1, v: r => r.fgm + r.fga / 1000 }, tpm: { best: -1, v: r => r.tpm + r.tpa / 1000 },
+  ftm: { best: -1, v: r => r.ftm + r.fta / 1000 }, pm: { best: -1, v: r => r.pm },
+  ts: { best: -1, v: r => (r.fga + 0.44 * r.fta >= 10 ? (100 * r.pts) / (2 * (r.fga + 0.44 * r.fta)) : null) },
+};
+const sPoss = r => r.fga + 0.4 * r.fta - 1.07 * (div(r.orb, r.orb + r.odrb) || 0) * (r.fga - r.fgm) + r.tov;
+const sOposs = r => r.ofga + 0.4 * r.ofta - 1.07 * (div(r.oorb, r.oorb + r.drb) || 0) * (r.ofga - r.ofgm) + r.otov;
+const sGamePoss = r => 0.5 * (sPoss(r) + sOposs(r));
+const SEASON_T = {
+  pts: { best: -1, v: r => r.pts }, opp: { best: 1, v: r => r.opp }, mar: { best: -1, v: r => r.pts - r.opp },
+  ortg: { best: -1, v: r => (100 * r.pts) / sGamePoss(r) }, drtg: { best: 1, v: r => (100 * r.opp) / sGamePoss(r) },
+  pace: { best: -1, v: r => (48 * sGamePoss(r)) / (r.min / 5) },
+  fgp: { best: -1, v: r => (100 * r.fgm) / r.fga }, tpm: { best: -1, v: r => r.tpm }, tpp: { best: -1, v: r => (r.tpa >= 15 ? (100 * r.tpm) / r.tpa : null) },
+  ast: { best: -1, v: r => r.ast }, reb: { best: -1, v: r => r.orb + r.drb }, tov: { best: 1, v: r => r.tov },
+  stl: { best: -1, v: r => r.stl }, blk: { best: -1, v: r => r.blk },
+};
+// per-game averages from season totals (all sortable both ways: the players file has everyone)
+const avgOf = k => r => div(r[k], r.gp);
+const SEASON_A = {
+  gp: { best: -1, v: r => r.gp }, min: { best: -1, v: avgOf('min') }, pts: { best: -1, v: avgOf('pts') },
+  reb: { best: -1, v: r => div(r.orb + r.drb, r.gp) }, ast: { best: -1, v: avgOf('ast') }, stl: { best: -1, v: avgOf('stl') },
+  blk: { best: -1, v: avgOf('blk') }, tov: { best: -1, v: avgOf('tov') }, fgp: { best: -1, v: r => (r.fga ? (100 * r.fgm) / r.fga : null) },
+  tpm: { best: -1, v: avgOf('tpm') }, tpp: { best: -1, v: r => (r.tpa ? (100 * r.tpm) / r.tpa : null) },
+  ftp: { best: -1, v: r => (r.fta ? (100 * r.ftm) / r.fta : null) },
+  ts: { best: -1, v: r => (r.fga + r.fta ? (100 * r.pts) / (2 * (r.fga + 0.44 * r.fta)) : null) },
+  gmsc: { best: -1, v: avgOf('gmsc') }, pm: { best: -1, v: avgOf('pm') },
+};
+const SEASON_TOP = 50;
+const SEASON_TABS = {
+  avg: { file: 'season-players.json', metrics: SEASON_A, sort: 'pts', both: true },
+  pg: { file: 'season-best.json', metrics: SEASON_P, sort: 'gmsc' },
+  tg: { file: 'season-best.json', metrics: SEASON_T, sort: 'mar' },
+};
+const seasonData = {};          // file name -> parsed JSON
+const seasonState = { tab: 'avg', team: '', find: '', all: false, sort: { avg: { k: 'pts', dir: -1 }, pg: { k: 'gmsc', dir: -1 }, tg: { k: 'mar', dir: -1 } } };
+const fmtDay = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const rowObj = (cols, r) => Object.fromEntries(cols.map((c, i) => [c, r[i]]));
+
+async function seasonFile(name) {
+  if (!seasonData[name]) seasonData[name] = await getJSON('data/' + name, null, 'no-cache');   // GitHub Pages sends ETags
+  return seasonData[name];
+}
+
+// Best games: the small file holds the exact top 50 for every column; filtering needs every row.
+const seasonFiltered = () => !!(seasonState.team || seasonState.find.trim());
+async function loadSeason() {
+  if (state.view !== 'season') return;
+  const tab = SEASON_TABS[seasonState.tab];
+  const name = seasonState.tab !== 'avg' && seasonFiltered() ? 'season-games.json' : tab.file;
+  if (!seasonData[name]) setStatus('#seasonStatus', 'Loading…');
+  try {
+    const d = await seasonFile(name);
+    if (state.view !== 'season') return;
+    renderSeason(d);
+  } catch (e) {
+    setStatus('#seasonStatus', 'Season data isn’t available yet (' + e.message + ').', true);
+    $('#seasonTable').replaceChildren();
+  }
+}
+
+function teamMatch(abbr) {
+  const t = seasonState.team;
+  return !t || (t === '*' ? followed(abbr) : abbr === t);
+}
+
+function renderSeason(d) {
+  const tab = seasonState.tab, def = SEASON_TABS[tab], sort = seasonState.sort[tab], m = def.metrics[sort.k];
+  const find = seasonState.find.trim().toLowerCase();
+  let rows;
+  if (tab === 'avg') {
+    rows = d.rows.map(r => { const o = rowObj(d.cols, r); o.tm = d.teams[o.t]; o.name = d.players[o.p][1]; o.pid = d.players[o.p][0]; return o; })
+      .filter(o => teamMatch(o.tm) && (!find || o.name.toLowerCase().includes(find)));
+    // qualified: played in at least 70% of their team's games (NBA leaderboards use a similar rule)
+    if (!seasonState.all && !find) rows = rows.filter(o => o.gp >= 0.7 * d.teamGames[o.t]);
+  } else if (tab === 'pg') {
+    rows = d.rows.map(r => { const o = rowObj(d.pcols, r), g = d.games[o.g];
+      return { ...o, tm: d.teams[o.t], op: d.teams[o.o], name: d.players[o.p][1], gid: g[0], day: g[1] }; })
+      .filter(o => teamMatch(o.tm) && (!find || o.name.toLowerCase().includes(find)));
+  } else {
+    rows = d.trows.map(r => { const o = rowObj(d.tcols, r), g = d.games[o.g];
+      return { ...o, tm: d.teams[o.t], op: d.teams[o.o], gid: g[0], day: g[1] }; }).filter(o => teamMatch(o.tm));
+  }
+  const vals = rows.map(o => ({ o, v: m.v(o) }));
+  vals.sort((a, b) => (a.v == null) - (b.v == null) || sort.dir * (a.v - b.v));
+  const shown = tab === 'avg' ? vals : vals.slice(0, SEASON_TOP);
+  $('#seasonTable').replaceChildren(seasonTable(tab, shown));
+  const what = tab === 'avg' ? rows.length + ' players' + (!seasonState.all && !find ? ' (qualified)' : '')
+    : 'top ' + Math.min(SEASON_TOP, rows.length) + ' of ' + (seasonFiltered() ? rows.length : 'all') + ' ' + (tab === 'pg' ? 'player' : 'team') + ' games';
+  setStatus('#seasonStatus', d.through ? 'Regular season through ' + fmtDay(d.through) + ' · ' + what : what);
+}
+
+// columns: [header, metric key | null, cell(o) -> text, tooltip, class]
+const f1n = v => (v == null || !Number.isFinite(v) ? '' : v.toFixed(1));
+const SEASON_COLS = {
+  avg: [['GP', 'gp', o => o.gp, 'Games played'], ['MIN', 'min', o => f1n(div(o.min, o.gp)), 'Minutes per game'],
+    ['PTS', 'pts', o => f1n(div(o.pts, o.gp)), 'Points per game', 'k'], ['REB', 'reb', o => f1n(div(o.orb + o.drb, o.gp)), 'Rebounds per game'],
+    ['AST', 'ast', o => f1n(div(o.ast, o.gp)), 'Assists per game'], ['STL', 'stl', o => f1n(div(o.stl, o.gp)), 'Steals per game'],
+    ['BLK', 'blk', o => f1n(div(o.blk, o.gp)), 'Blocks per game'], ['TO', 'tov', o => f1n(div(o.tov, o.gp)), 'Turnovers per game'],
+    ['FG%', 'fgp', o => f1n(SEASON_A.fgp.v(o)), 'Field goal %'], ['3PM', 'tpm', o => f1n(div(o.tpm, o.gp)), '3-pointers made per game'],
+    ['3P%', 'tpp', o => f1n(SEASON_A.tpp.v(o)), '3-point %'], ['FT%', 'ftp', o => f1n(SEASON_A.ftp.v(o)), 'Free throw %'],
+    ['TS%', 'ts', o => f1n(SEASON_A.ts.v(o)), 'True shooting %'], ['GmSc', 'gmsc', o => f1n(div(o.gmsc, o.gp)), 'Average Game Score'],
+    ['+/-', 'pm', o => f1n(div(o.pm, o.gp)), 'Plus/minus per game']],
+  pg: [['Game', null, o => o.tm + (o.home ? ' vs ' : ' @ ') + o.op, 'Team and opponent', 'l'], ['Date', null, o => fmtDay(o.day), null, 'l'],
+    ['GmSc', 'gmsc', o => f1n(SEASON_P.gmsc.v(o)), 'Game Score', 'k'], ['MIN', 'min', o => o.min, 'Minutes'], ['PTS', 'pts', o => o.pts, 'Points'],
+    ['REB', 'reb', o => o.orb + o.drb, 'Rebounds'], ['AST', 'ast', o => o.ast, 'Assists'], ['STL', 'stl', o => o.stl, 'Steals'],
+    ['BLK', 'blk', o => o.blk, 'Blocks'], ['TO', 'tov', o => o.tov, 'Turnovers'], ['FG', 'fgm', o => o.fgm + '-' + o.fga, 'Field goals'],
+    ['3P', 'tpm', o => o.tpm + '-' + o.tpa, '3-pointers'], ['FT', 'ftm', o => o.ftm + '-' + o.fta, 'Free throws'],
+    ['TS%', 'ts', o => f1n(SEASON_P.ts.v(o)), 'True shooting % (10+ shot attempts to rank)'], ['+/-', 'pm', o => sg(o.pm), 'Plus/minus']],
+  tg: [['Opp', null, o => (o.home ? 'vs ' : '@ ') + o.op, 'Opponent', 'l'], ['Date', null, o => fmtDay(o.day), null, 'l'],
+    ['Result', null, o => (o.pts > o.opp ? 'W ' : 'L ') + o.pts + '–' + o.opp, null, 'l'],
+    ['+/-', 'mar', o => sg(o.pts - o.opp), 'Point margin', 'k'], ['PTS', 'pts', o => o.pts, 'Points scored'], ['OPP', 'opp', o => o.opp, 'Points allowed'],
+    ['ORtg', 'ortg', o => f1n(SEASON_T.ortg.v(o)), 'Points per 100 possessions'], ['DRtg', 'drtg', o => f1n(SEASON_T.drtg.v(o)), 'Points allowed per 100 possessions'],
+    ['Pace', 'pace', o => f1n(SEASON_T.pace.v(o)), 'Possessions per 48 minutes'], ['FG%', 'fgp', o => f1n(SEASON_T.fgp.v(o)), 'Field goal %'],
+    ['3PM', 'tpm', o => o.tpm, '3-pointers made'], ['3P%', 'tpp', o => f1n((100 * o.tpm) / o.tpa), '3-point % (15+ attempts to rank)'],
+    ['AST', 'ast', o => o.ast, 'Assists'], ['REB', 'reb', o => o.orb + o.drb, 'Rebounds'], ['TO', 'tov', o => o.tov, 'Turnovers'],
+    ['STL', 'stl', o => o.stl, 'Steals'], ['BLK', 'blk', o => o.blk, 'Blocks']],
+};
+
+function seasonTable(tab, vals) {
+  const def = SEASON_TABS[tab], sort = seasonState.sort[tab];
+  const wrap = el('div', 'stw'), tbl = el('table', 'st'), hr = el('tr');
+  hr.append(el('th', null, tab === 'tg' ? 'Team' : 'Player'));
+  for (const [h, k, , title, cls] of SEASON_COLS[tab]) {
+    const th = el('th', cls || null, h);
+    if (title) th.title = title;
+    if (k) {
+      th.tabIndex = 0; th.dataset.k = k;
+      if (sort.k === k) th.setAttribute('aria-sort', sort.dir > 0 ? 'ascending' : 'descending');
+      const go = () => {
+        const best = def.metrics[k].best;
+        // best games are pre-selected per column, so only the "best" direction is exact; per-game sorts both ways
+        seasonState.sort[tab] = sort.k === k && def.both ? { k, dir: -sort.dir } : { k, dir: best };
+        writeHash();
+        loadSeason();
+      };
+      th.onclick = go;
+      th.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+    }
+    hr.append(th);
+  }
+  const thead = el('thead'); thead.append(hr);
+  const tb = el('tbody');
+  let rank = 0, last;
+  vals.forEach(({ o, v }, i) => {
+    if (v !== last) { rank = i + 1; last = v; }
+    const tr = el('tr', [tab !== 'avg' && 'go', followed(o.tm) && 'fol'].filter(Boolean).join(' ') || null);
+    const first = el('td');
+    first.append(el('span', 'rk', String(rank)));
+    if (tab === 'tg') first.append(o.tm);
+    else {
+      const a = el('a', null, o.name);
+      a.href = bbref(o.name); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = o.name + ' on Basketball Reference';
+      first.append(a);
+      if (tab === 'avg') first.append(el('span', 'mu', ' ' + o.tm));
+    }
+    tr.append(first);
+    for (const [, k, cell, , cls] of SEASON_COLS[tab]) tr.append(el('td', [cls, k && k === seasonState.sort[tab].k && 'k'].filter(Boolean).join(' ') || null, String(cell(o))));
+    if (tab !== 'avg') {
+      tr.title = 'Open ' + o.tm + (o.home ? ' vs ' : ' @ ') + o.op + ', ' + fmtDay(o.day);
+      tr.onclick = e => { if (!e.target.closest('a')) openGameOn(o.day, o.gid); };
+    }
+    tb.append(tr);
+  });
+  tbl.append(thead, tb);
+  wrap.append(tbl);
+  return wrap;
+}
+
+// open a game from another day (season tables): a new history entry pointing at that day and game
+function openGameOn(day, id) {
+  pushNav();
+  history.replaceState(null, '', '#d=' + day.replaceAll('-', '') + '&g=' + id);
+  applyHash(false);
+}
+
+function syncSeasonControls() {
+  const tab = seasonState.tab;
+  $('#seasonTabs').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.s === tab)));
+  $('#seasonFind').hidden = tab === 'tg';
+  $('#seasonAllWrap').hidden = tab !== 'avg';
+  const sel = $('#seasonTeam');
+  if (!sel.options.length) {
+    sel.append(new Option('All teams', ''), new Option('Followed teams', '*'));
+    TEAMS.forEach(t => sel.append(new Option(t, t)));
+  }
+  sel.value = seasonState.team;
+  $('#seasonFind').value = seasonState.find;
+  $('#seasonAll').checked = seasonState.all;
+}
+$('#seasonTabs').querySelectorAll('button').forEach(b => (b.onclick = () => {
+  if (seasonState.tab === b.dataset.s) return;
+  pushNav(); seasonState.tab = b.dataset.s; syncSeasonControls(); writeHash(); loadSeason();
+}));
+$('#seasonTeam').onchange = e => { seasonState.team = e.target.value; writeHash(); loadSeason(); };
+let findTimer = 0;
+$('#seasonFind').oninput = e => { clearTimeout(findTimer); findTimer = setTimeout(() => { seasonState.find = e.target.value; writeHash(); loadSeason(); }, 250); };
+$('#seasonAll').onchange = e => { seasonState.all = e.target.checked; writeHash(); loadSeason(); };
 
 // ---------------------------------------------------------------- settings + data usage
 const CHOICES = {
@@ -1193,11 +1480,25 @@ function renderSettings() {
     lab.append(cb, document.createTextNode(text));
     box.append(lab);
   }
+  const fol = el('div', 'follow');
+  fol.append(el('span', null, 'Followed teams'));
+  const teams = el('div', 'teams');
+  for (const t of TEAMS) {
+    const b = el('button', null, t);
+    b.setAttribute('aria-pressed', String(settings.follow.includes(t)));
+    b.onclick = () => {
+      settings.follow = settings.follow.includes(t) ? settings.follow.filter(x => x !== t) : [...settings.follow, t];
+      b.setAttribute('aria-pressed', String(settings.follow.includes(t)));
+      saveSettings();
+      renderGames(); renderListing();
+    };
+    teams.append(b);
+  }
+  fol.append(teams);
+  box.append(fol);
   const reset = el('button', null, 'Defaults');
-  reset.onclick = () => { Object.assign(settings, DEFAULTS); saveSettings(); renderSettings(); retime(); };
+  reset.onclick = () => { Object.assign(settings, DEFAULTS); saveSettings(); renderSettings(); renderGames(); renderListing(); retime(); };
   box.append(reset);
-  box.append(el('p', 'hint', 'Lightweight updates fetch only new plays (~2 KB) between box-score refreshes, instead of the whole game (~35 KB) every time. ' +
-    'Breaks: checks every 30s between quarters and in timeouts, every 60s at halftime. Nothing is downloaded while this tab is hidden, and finished games are never re-downloaded.'));
   renderUsage();
 }
 
@@ -1230,11 +1531,11 @@ function renderUsage() {
   const nLive = state.games.filter(g => g.state === 'in').length;
   const watching = state.view === 'game' && state.gameState === 'in';
   const now = document.hidden ? 0 : listing() ? perMinute('leaders', nLive) : perMinute(watching ? 'game' : 'scores', nLive);
-  const nowWhat = listing() ? ({ home: 'Home page', leaders: 'Top performers', game: 'All games' })[state.view] + ' with ' + nLive + ' live game' + (nLive === 1 ? '' : 's')
+  const nowWhat = state.view === 'season' ? 'Season stats (loaded once, no refresh)' : listing() ? ({ home: 'Home page', leaders: 'Top performers', game: 'All games' })[state.view] + ' with ' + nLive + ' live game' + (nLive === 1 ? '' : 's')
     : watching ? 'Watching ' + (state.away?.abbr || '') + '–' + (state.home?.abbr || '') + ' live'
     : nLive ? 'Scores only (' + nLive + ' live game' + (nLive === 1 ? '' : 's') + ')' : 'No live games: nothing to refresh';
   const tbl = el('table'), th = el('tr');
-  ['Estimated data', 'per min', 'per hour', 'per game*'].forEach(h => th.append(el('th', null, h)));
+  ['Estimated data', 'per min', 'per hour', 'per game'].forEach(h => th.append(el('th', null, h)));
   const thead = el('thead'); thead.append(th);
   const tb = el('tbody');
   const row = (label, v, cls, sub) => {
@@ -1252,7 +1553,7 @@ function renderUsage() {
   const clr = el('button', null, 'Reset');
   clr.onclick = () => { usage.total = { since: Date.now(), bytes: 0 }; store.set('nbapbp.usage', usage.total); renderUsage(); };
   used.append(clr);
-  box.replaceChildren(tbl, el('p', 'muted', '*A live game lasts about 2¼ hours. Estimates are upper bounds: polling slows during breaks. Compressed sizes, excluding this page itself (~18 KB, downloaded once).'), used);
+  box.replaceChildren(tbl, used);
 }
 
 $('#setClose').onclick = () => $('#gear').click();
@@ -1267,20 +1568,24 @@ $('#gear').onclick = () => {
 
 // ---------------------------------------------------------------- views, routing, misc
 function setStatus(sel, msg, err) { const s = $(sel); s.textContent = msg; s.classList.toggle('err', !!err); }
-const viewStatus = () => ({ game: '#status', leaders: '#ldStatus', home: '#homeStatus' })[state.view];
+const viewStatus = () => ({ game: '#status', leaders: '#ldStatus', home: '#homeStatus', season: '#seasonStatus' })[state.view];
 
 function setView(v, load = true) {
   state.view = v;
   $('#gameView').hidden = v !== 'game';
   $('#leadersView').hidden = v !== 'leaders';
   $('#homeView').hidden = v !== 'home';
+  $('#seasonView').hidden = v !== 'season';
   $('#navGame').setAttribute('aria-pressed', String(v === 'game'));
   $('#navLeaders').setAttribute('aria-pressed', String(v === 'leaders'));
+  $('#navSeason').setAttribute('aria-pressed', String(v === 'season'));
+  if (v === 'season') syncSeasonControls();
   stop('pbp'); stop('ld');
   syncMode(); writeHash(); renderGames();
   renderListing();
   if (!load) return;
-  if (listing()) loadLeaders(); else loadPBP();
+  if (v === 'season') loadSeason();
+  else if (listing()) loadLeaders(); else loadPBP();
 }
 
 function setTab(t) {
@@ -1290,17 +1595,70 @@ function setTab(t) {
   writeHash();
 }
 
-// URL: (nothing) home · #v=leaders · #g=<id> game (#v=game before one is chosen) · #d=YYYYMMDD date · #t=box mobile tab
+// URL: (nothing) home · #v=leaders · #v=season[&s=pg|tg] (+ view state below) · #g=<id> game (#v=game before one is chosen) · #d=YYYYMMDD date · #t=box mobile tab
 function writeHash() {
   const q = new URLSearchParams();
-  if (state.view === 'leaders') q.set('v', 'leaders');
+  if (state.view === 'leaders' || state.view === 'season') q.set('v', state.view);
+  if (state.view === 'season' && seasonState.tab !== 'avg') q.set('s', seasonState.tab);
   if (state.view === 'game' && !state.gameId) q.set('v', 'game');
   if (state.date) q.set('d', state.date);
   if (state.view === 'game' && state.gameId) q.set('g', state.gameId);
   if (state.view === 'game' && state.tab === 'box') q.set('t', 'box');
+  writeViewState(q);
   const h = q.toString();
   history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
 }
+// Shareable view state: written only when it differs from the default.
+//   game:   pf=scoring|<team abbr> (play filter) · pq=<quarter> · po=old (oldest first) · sort=<box column>[&dir=asc|desc]
+//   season: team=<abbr>|followed · q=<player search> · all=1 · sort=<metric>[&dir=asc|desc]
+function writeViewState(q) {
+  if (state.view === 'game' && state.gameId) {
+    const f = state.filterAbbr || (state.filter === 'all' ? null : state.filter === 'scoring' ? 'scoring' : teamById(state.filter)?.abbr);   // a URL team filter is pending until the game loads
+    if (f) q.set('pf', f);
+    if (state.period !== 'all') q.set('pq', state.period);
+    if (!state.newest) q.set('po', 'old');
+    if (state.sort.key !== 'GS' || state.sort.dir !== -1) {
+      q.set('sort', state.sort.key);
+      if (state.sort.dir !== boxDefaultDir(state.sort.key)) q.set('dir', state.sort.dir > 0 ? 'asc' : 'desc');
+    }
+  }
+  if (state.view === 'season') {
+    const tab = seasonState.tab, def = SEASON_TABS[tab], ss = seasonState.sort[tab];
+    if (seasonState.team) q.set('team', seasonState.team === '*' ? 'followed' : seasonState.team);
+    if (seasonState.find.trim()) q.set('q', seasonState.find.trim());
+    if (seasonState.all && tab === 'avg') q.set('all', '1');
+    if (ss.k !== def.sort) q.set('sort', ss.k);
+    if (ss.dir !== def.metrics[ss.k].best) q.set('dir', ss.dir > 0 ? 'asc' : 'desc');
+  }
+}
+
+// The URL is the source of truth on load and Back/Forward: anything it doesn't mention goes back to its default.
+function readViewState(q, view) {
+  const dir = q.get('dir') === 'asc' ? 1 : q.get('dir') === 'desc' ? -1 : null;
+  if (view === 'game') {
+    const pf = q.get('pf');
+    state.filter = pf === 'scoring' ? 'scoring' : 'all';
+    state.filterAbbr = pf && pf !== 'scoring' ? pf : null;
+    state.period = /^\d{1,2}$/.test(q.get('pq') || '') ? q.get('pq') : 'all';
+    state.newest = q.get('po') !== 'old';
+    const k = q.get('sort'), key = k === 'Player' || COLS.some(c => c.h === k) ? k : 'GS';
+    state.sort = { key, dir: dir ?? boxDefaultDir(key) };
+    syncOrder();
+    filterKey = '';                                    // rebuild the filter buttons with the new selection
+    if (state.away && state.home) renderFilters();
+    if ([...$('#period').options].some(o => o.value === state.period)) $('#period').value = state.period;
+    if (state.plays.length) renderPlays();
+    if (state.box) renderBox();
+  } else if (view === 'season') {
+    const tab = seasonState.tab, def = SEASON_TABS[tab], t = q.get('team');
+    seasonState.team = t === 'followed' ? '*' : TEAMS.includes(t) ? t : '';
+    seasonState.find = q.get('q') || '';
+    seasonState.all = q.get('all') === '1';
+    const k = def.metrics[q.get('sort')] ? q.get('sort') : def.sort;
+    seasonState.sort[tab] = { k, dir: def.both && dir ? dir : def.metrics[k].best };
+  }
+}
+
 // Start a new history entry for a user navigation; the code that follows updates it via writeHash()
 const pushNav = () => history.pushState(null, '', location.href);
 
@@ -1308,26 +1666,34 @@ function parseHash() {
   const q = new URLSearchParams(location.hash.slice(1));
   const g = q.get('g');
   return { date: /^\d{8}$/.test(q.get('d') || '') ? q.get('d') : null, g,
-    view: q.get('v') === 'leaders' ? 'leaders' : g || q.get('v') === 'game' ? 'game' : 'home', tab: q.get('t') === 'box' ? 'box' : 'plays' };
+    view: ['leaders', 'season'].includes(q.get('v')) ? q.get('v') : g || q.get('v') === 'game' ? 'game' : 'home',
+    tab: q.get('t') === 'box' ? 'box' : 'plays', s: ['pg', 'tg'].includes(q.get('s')) ? q.get('s') : 'avg' };
 }
 
 // Apply the URL (page load, or browser Back/Forward)
 async function applyHash(initial) {
-  const h = parseHash();
+  const h = parseHash(), q = new URLSearchParams(location.hash.slice(1));
   setTab(h.tab);
+  seasonState.tab = h.s;
+  if (h.view === 'season') readViewState(q, 'season');
   if (initial || h.date !== state.date) {
     state.date = h.date;
     clearGame(h.view === 'game' ? 'Loading…' : '');
     $('#leaders').replaceChildren();
     if (h.g) state.gameId = h.g;
     setView(h.view, false);
-    if (h.view === 'game' && h.g) loadPBP();
+    if (h.view === 'game' && h.g) { readViewState(q, 'game'); writeHash(); loadPBP(); }
+    if (h.view === 'season') loadSeason();
     await loadScoreboard();
     if (listing()) loadLeaders();
     return;
   }
-  if (h.view === 'game' && h.g && h.g !== state.gameId) { setView('game', false); selectGame(h.g); }
-  else { if (h.view === 'game' && !h.g && state.gameId) clearGame(); setView(h.view); }
+  if (h.view === 'game' && h.g && h.g !== state.gameId) { setView('game', false); selectGame(h.g); readViewState(q, 'game'); writeHash(); }
+  else {
+    if (h.view === 'game' && !h.g && state.gameId) clearGame();
+    if (h.view === 'game' && h.g) readViewState(q, 'game');
+    setView(h.view);
+  }
 }
 
 function measureHeader() { document.documentElement.style.setProperty('--hh', $('header').offsetHeight + 'px'); }
@@ -1352,14 +1718,27 @@ const go = v => { if (state.view !== v) { pushNav(); setView(v); } };
 $('#prev').onclick = () => shiftDay(-1);
 $('#next').onclick = () => shiftDay(1);
 $('#today').onclick = () => changeDate(null);
+// calendar: the browser's own date picker (showPicker where supported; focusing the input elsewhere)
+$('#day').onclick = () => {
+  const pick = $('#dayPick');
+  pick.value = state.dayDate || ymd(new Date()).replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3');
+  try { pick.showPicker(); } catch { pick.focus(); }
+};
+$('#dayPick').onchange = e => {
+  const v = e.target.value;                            // YYYY-MM-DD, or '' when cleared
+  if (!v || v === state.dayDate) return;
+  changeDate(v === state.todayDate ? null : v.replaceAll('-', ''));
+};
 $('#logo').onclick = e => { e.preventDefault(); go('home'); };
 $('#allLeaders').onclick = () => go('leaders');
 // "Games" always shows the grid of all games, even from inside a game
 $('#navGame').onclick = () => { if (state.view === 'game' && !state.gameId) return; pushNav(); clearGame(); setView('game'); };
 $('#navLeaders').onclick = () => go('leaders');
+$('#navSeason').onclick = () => go('season');
 $('#tabs').querySelectorAll('button').forEach(b => (b.onclick = () => setTab(b.dataset.tab)));
-$('#period').onchange = e => { state.period = e.target.value; renderPlays(); };
-$('#order').onclick = e => { state.newest = !state.newest; e.target.textContent = state.newest ? 'Newest first' : 'Oldest first'; renderPlays(); };
+$('#period').onchange = e => { state.period = e.target.value; renderPlays(); writeHash(); };
+$('#order').onclick = () => { state.newest = !state.newest; syncOrder(); renderPlays(); writeHash(); };
+const syncOrder = () => ($('#order').textContent = state.newest ? 'Newest first' : 'Oldest first');
 window.addEventListener('popstate', () => applyHash(false));
 
 // pause all polling while the tab is hidden; refresh immediately on return
