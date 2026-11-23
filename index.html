@@ -58,7 +58,7 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .setgrid>button{justify-self:start}
 #usage p{margin:.25rem 0}
 #usage .now{font-weight:600}
-@media (max-width:520px){.bar .lt{display:none}.bar .lg{display:none}.bar .sm{display:inline}.bar{gap:.3rem}#day{min-width:4.6em}}
+@media (max-width:520px){.bar .lt{display:none}.bar .lg{display:none}.bar .sm{display:inline}.bar{gap:.2rem}.bar button{padding:.2rem .35rem;font-size:13px}#day{min-width:3.6em}}
 
 main{padding-top:.6rem;padding-bottom:1.5rem}
 .status{font-size:12px;color:var(--muted);margin:.3rem 0;min-height:1em}
@@ -165,6 +165,26 @@ th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
 .card .sub{display:block;font-size:11px;color:var(--muted)}
 .card li.go{grid-template-columns:1.3em 1fr auto .7em;cursor:pointer;border-radius:4px}
 .card li.fol{background:var(--fol)}
+
+/* season tables */
+#seasonView .controls{gap:.4rem}
+#seasonView input[type=search]{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:.2rem .5rem;width:9em}
+#seasonView .ck{display:inline-flex;align-items:center;gap:.25rem;font-size:13px}
+.stw{overflow-x:auto;border:1px solid var(--line);border-radius:8px;scrollbar-width:thin}
+table.st{min-width:100%}
+.st th,.st td{padding:.2rem .4rem}
+.st th:first-child,.st td:first-child{position:sticky;left:0;z-index:1;text-align:left;background:var(--bg);max-width:12em;overflow:hidden;text-overflow:ellipsis}
+.st thead th{cursor:pointer;user-select:none}
+.st thead th:first-child{background:var(--card)}
+.st thead th:hover{color:var(--fg)}
+.st thead th[aria-sort]{color:var(--accent);box-shadow:inset 0 -2px var(--accent)}
+.st td.l,.st th.l{text-align:left}
+.st td.k{font-weight:700}
+.st td .rk{display:inline-block;min-width:1.9em;color:var(--muted);font-size:11px}
+.st td .mu{color:var(--muted)}
+.st tbody tr.go{cursor:pointer}
+.st tbody tr:hover td{background:var(--card)}
+.st tbody tr.fol td{background:var(--fol)}
 .card li.go:hover,.card li.go:focus-visible{background:var(--card);outline:none}
 .follow{grid-column:1/-1}
 .follow .teams{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.25rem}
@@ -185,6 +205,7 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
       <span class="seg" role="group" aria-label="View">
         <button id="navGame" aria-pressed="true">Games</button>
         <button id="navLeaders" aria-pressed="false"><span class="lg">Top performers</span><span class="sm">Leaders</span></button>
+        <button id="navSeason" aria-pressed="false">Season</button>
       </span>
       <span class="sp"></span>
       <button id="prev" aria-label="Previous day">‹</button>
@@ -241,6 +262,22 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
       <h2 class="hh">Games</h2>
       <div id="homeGames"></div>
     </div>
+  </section>
+
+  <!-- ===== season view ===== -->
+  <section id="seasonView" hidden>
+    <div class="controls">
+      <span class="seg" id="seasonTabs" role="tablist">
+        <button data-s="avg" aria-pressed="true">Per game</button>
+        <button data-s="pg" aria-pressed="false">Player games</button>
+        <button data-s="tg" aria-pressed="false">Team games</button>
+      </span>
+      <select id="seasonTeam" aria-label="Team"></select>
+      <input id="seasonFind" type="search" placeholder="Player" aria-label="Find a player" autocomplete="off">
+      <label class="ck" id="seasonAllWrap"><input type="checkbox" id="seasonAll"> All players</label>
+    </div>
+    <p class="status" id="seasonStatus"></p>
+    <div id="seasonTable"></div>
   </section>
 
   <!-- ===== top performers view ===== -->
@@ -316,10 +353,10 @@ let sections = new Map(), periodCount = 0, filterKey = '';
 const SIZE = { summary: 34000, plays: 2300, status: 300, scoreboard: 13000, ...(store.get('nbapbp.sizes') || {}) };
 const usage = { bytes: 0, requests: 0, total: store.get('nbapbp.usage') || { since: Date.now(), bytes: 0 } };
 
-async function getJSON(url, kind) {
+async function getJSON(url, kind, cache = 'no-store') {
   // 'no-store': responses have no ETag/Last-Modified (no 304s possible) and the core API allows
   // stale-while-revalidate, so a cached copy could be served stale. (Cache modes don't trigger a CORS preflight.)
-  const r = await fetch(url, { cache: 'no-store' });
+  const r = await fetch(url, { cache });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const text = await r.text();
   // Content-Length is CORS-safelisted; for gzip responses it is the on-the-wire size. Fallback: typical ~9:1 gzip ratio.
@@ -528,7 +565,7 @@ function renderGames() {
 // ---------------------------------------------------------------- game view
 // "Listing" pages show every game: home, Top performers, and the Games view before a game is opened.
 // They share the per-game box data loop (loadLeaders).
-const listing = () => state.view !== 'game' || !state.gameId;
+const listing = () => state.view === 'home' || state.view === 'leaders' || (state.view === 'game' && !state.gameId);
 function renderListing() {
   if (state.view === 'home') renderHome();
   else if (state.view === 'leaders') renderLeaders();
@@ -540,7 +577,9 @@ function renderGameList() {
 // game view shows either the card grid or one game; the header strip only appears inside a game
 function syncMode() {
   $('#gameView').dataset.mode = state.gameId ? 'game' : 'list';
-  $('#games').hidden = state.view === 'home' || (state.view === 'game' && !state.gameId);
+  $('#games').hidden = state.view === 'home' || state.view === 'season' || (state.view === 'game' && !state.gameId);
+  ['#prev', '#day', '#next'].forEach(x => ($(x).hidden = state.view === 'season'));   // season stats have no date
+  if (state.view === 'season') $('#today').hidden = true; else renderDay();
   measureHeader();
 }
 // user navigation to a game: a new history entry, so the browser Back button returns to where they were
@@ -1189,6 +1228,209 @@ function gameCard(g) {
   return card;
 }
 
+// ---------------------------------------------------------------- season: per-game leaders and best games
+// Data files are built nightly by scripts/build-season.mjs (GitHub Action) and served next to this page.
+// The metric definitions below must match PMETRICS/TMETRICS in that script (a test compares them).
+const SEASON_P = {
+  gmsc: { best: -1, v: r => r.pts + 0.4 * r.fgm - 0.7 * r.fga - 0.4 * (r.fta - r.ftm) + 0.7 * r.orb + 0.3 * r.drb + r.stl + 0.7 * r.ast + 0.7 * r.blk - 0.4 * r.pf - r.tov },
+  min: { best: -1, v: r => r.min }, pts: { best: -1, v: r => r.pts }, reb: { best: -1, v: r => r.orb + r.drb },
+  ast: { best: -1, v: r => r.ast }, stl: { best: -1, v: r => r.stl }, blk: { best: -1, v: r => r.blk },
+  tov: { best: -1, v: r => r.tov }, fgm: { best: -1, v: r => r.fgm + r.fga / 1000 }, tpm: { best: -1, v: r => r.tpm + r.tpa / 1000 },
+  ftm: { best: -1, v: r => r.ftm + r.fta / 1000 }, pm: { best: -1, v: r => r.pm },
+  ts: { best: -1, v: r => (r.fga + 0.44 * r.fta >= 10 ? (100 * r.pts) / (2 * (r.fga + 0.44 * r.fta)) : null) },
+};
+const sPoss = r => r.fga + 0.4 * r.fta - 1.07 * (div(r.orb, r.orb + r.odrb) || 0) * (r.fga - r.fgm) + r.tov;
+const sOposs = r => r.ofga + 0.4 * r.ofta - 1.07 * (div(r.oorb, r.oorb + r.drb) || 0) * (r.ofga - r.ofgm) + r.otov;
+const sGamePoss = r => 0.5 * (sPoss(r) + sOposs(r));
+const SEASON_T = {
+  pts: { best: -1, v: r => r.pts }, opp: { best: 1, v: r => r.opp }, mar: { best: -1, v: r => r.pts - r.opp },
+  ortg: { best: -1, v: r => (100 * r.pts) / sGamePoss(r) }, drtg: { best: 1, v: r => (100 * r.opp) / sGamePoss(r) },
+  pace: { best: -1, v: r => (48 * sGamePoss(r)) / (r.min / 5) },
+  fgp: { best: -1, v: r => (100 * r.fgm) / r.fga }, tpm: { best: -1, v: r => r.tpm }, tpp: { best: -1, v: r => (r.tpa >= 15 ? (100 * r.tpm) / r.tpa : null) },
+  ast: { best: -1, v: r => r.ast }, reb: { best: -1, v: r => r.orb + r.drb }, tov: { best: 1, v: r => r.tov },
+  stl: { best: -1, v: r => r.stl }, blk: { best: -1, v: r => r.blk },
+};
+// per-game averages from season totals (all sortable both ways: the players file has everyone)
+const avgOf = k => r => div(r[k], r.gp);
+const SEASON_A = {
+  gp: { best: -1, v: r => r.gp }, min: { best: -1, v: avgOf('min') }, pts: { best: -1, v: avgOf('pts') },
+  reb: { best: -1, v: r => div(r.orb + r.drb, r.gp) }, ast: { best: -1, v: avgOf('ast') }, stl: { best: -1, v: avgOf('stl') },
+  blk: { best: -1, v: avgOf('blk') }, tov: { best: -1, v: avgOf('tov') }, fgp: { best: -1, v: r => (r.fga ? (100 * r.fgm) / r.fga : null) },
+  tpm: { best: -1, v: avgOf('tpm') }, tpp: { best: -1, v: r => (r.tpa ? (100 * r.tpm) / r.tpa : null) },
+  ftp: { best: -1, v: r => (r.fta ? (100 * r.ftm) / r.fta : null) },
+  ts: { best: -1, v: r => (r.fga + r.fta ? (100 * r.pts) / (2 * (r.fga + 0.44 * r.fta)) : null) },
+  gmsc: { best: -1, v: avgOf('gmsc') }, pm: { best: -1, v: avgOf('pm') },
+};
+const SEASON_TOP = 50;
+const SEASON_TABS = {
+  avg: { file: 'season-players.json', metrics: SEASON_A, sort: 'pts', both: true },
+  pg: { file: 'season-best.json', metrics: SEASON_P, sort: 'gmsc' },
+  tg: { file: 'season-best.json', metrics: SEASON_T, sort: 'mar' },
+};
+const seasonData = {};          // file name -> parsed JSON
+const seasonState = { tab: 'avg', team: '', find: '', all: false, sort: { avg: { k: 'pts', dir: -1 }, pg: { k: 'gmsc', dir: -1 }, tg: { k: 'mar', dir: -1 } } };
+const fmtDay = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const rowObj = (cols, r) => Object.fromEntries(cols.map((c, i) => [c, r[i]]));
+
+async function seasonFile(name) {
+  if (!seasonData[name]) seasonData[name] = await getJSON('data/' + name, null, 'no-cache');   // GitHub Pages sends ETags
+  return seasonData[name];
+}
+
+// Best games: the small file holds the exact top 50 for every column; filtering needs every row.
+const seasonFiltered = () => !!(seasonState.team || seasonState.find.trim());
+async function loadSeason() {
+  if (state.view !== 'season') return;
+  const tab = SEASON_TABS[seasonState.tab];
+  const name = seasonState.tab !== 'avg' && seasonFiltered() ? 'season-games.json' : tab.file;
+  if (!seasonData[name]) setStatus('#seasonStatus', 'Loading…');
+  try {
+    const d = await seasonFile(name);
+    if (state.view !== 'season') return;
+    renderSeason(d);
+  } catch (e) {
+    setStatus('#seasonStatus', 'Season data isn’t available yet (' + e.message + ').', true);
+    $('#seasonTable').replaceChildren();
+  }
+}
+
+function teamMatch(abbr) {
+  const t = seasonState.team;
+  return !t || (t === '*' ? followed(abbr) : abbr === t);
+}
+
+function renderSeason(d) {
+  const tab = seasonState.tab, def = SEASON_TABS[tab], sort = seasonState.sort[tab], m = def.metrics[sort.k];
+  const find = seasonState.find.trim().toLowerCase();
+  let rows;
+  if (tab === 'avg') {
+    rows = d.rows.map(r => { const o = rowObj(d.cols, r); o.tm = d.teams[o.t]; o.name = d.players[o.p][1]; o.pid = d.players[o.p][0]; return o; })
+      .filter(o => teamMatch(o.tm) && (!find || o.name.toLowerCase().includes(find)));
+    // qualified: played in at least 70% of their team's games (NBA leaderboards use a similar rule)
+    if (!seasonState.all && !find) rows = rows.filter(o => o.gp >= 0.7 * d.teamGames[o.t]);
+  } else if (tab === 'pg') {
+    rows = d.rows.map(r => { const o = rowObj(d.pcols, r), g = d.games[o.g];
+      return { ...o, tm: d.teams[o.t], op: d.teams[o.o], name: d.players[o.p][1], gid: g[0], day: g[1] }; })
+      .filter(o => teamMatch(o.tm) && (!find || o.name.toLowerCase().includes(find)));
+  } else {
+    rows = d.trows.map(r => { const o = rowObj(d.tcols, r), g = d.games[o.g];
+      return { ...o, tm: d.teams[o.t], op: d.teams[o.o], gid: g[0], day: g[1] }; }).filter(o => teamMatch(o.tm));
+  }
+  const vals = rows.map(o => ({ o, v: m.v(o) }));
+  vals.sort((a, b) => (a.v == null) - (b.v == null) || sort.dir * (a.v - b.v));
+  const shown = tab === 'avg' ? vals : vals.slice(0, SEASON_TOP);
+  $('#seasonTable').replaceChildren(seasonTable(tab, shown));
+  const what = tab === 'avg' ? rows.length + ' players' + (!seasonState.all && !find ? ' (qualified)' : '')
+    : 'top ' + Math.min(SEASON_TOP, rows.length) + ' of ' + (seasonFiltered() ? rows.length : 'all') + ' ' + (tab === 'pg' ? 'player' : 'team') + ' games';
+  setStatus('#seasonStatus', d.through ? 'Regular season through ' + fmtDay(d.through) + ' · ' + what : what);
+}
+
+// columns: [header, metric key | null, cell(o) -> text, tooltip, class]
+const f1n = v => (v == null || !Number.isFinite(v) ? '' : v.toFixed(1));
+const SEASON_COLS = {
+  avg: [['GP', 'gp', o => o.gp, 'Games played'], ['MIN', 'min', o => f1n(div(o.min, o.gp)), 'Minutes per game'],
+    ['PTS', 'pts', o => f1n(div(o.pts, o.gp)), 'Points per game', 'k'], ['REB', 'reb', o => f1n(div(o.orb + o.drb, o.gp)), 'Rebounds per game'],
+    ['AST', 'ast', o => f1n(div(o.ast, o.gp)), 'Assists per game'], ['STL', 'stl', o => f1n(div(o.stl, o.gp)), 'Steals per game'],
+    ['BLK', 'blk', o => f1n(div(o.blk, o.gp)), 'Blocks per game'], ['TO', 'tov', o => f1n(div(o.tov, o.gp)), 'Turnovers per game'],
+    ['FG%', 'fgp', o => f1n(SEASON_A.fgp.v(o)), 'Field goal %'], ['3PM', 'tpm', o => f1n(div(o.tpm, o.gp)), '3-pointers made per game'],
+    ['3P%', 'tpp', o => f1n(SEASON_A.tpp.v(o)), '3-point %'], ['FT%', 'ftp', o => f1n(SEASON_A.ftp.v(o)), 'Free throw %'],
+    ['TS%', 'ts', o => f1n(SEASON_A.ts.v(o)), 'True shooting %'], ['GmSc', 'gmsc', o => f1n(div(o.gmsc, o.gp)), 'Average Game Score'],
+    ['+/-', 'pm', o => f1n(div(o.pm, o.gp)), 'Plus/minus per game']],
+  pg: [['Game', null, o => o.tm + (o.home ? ' vs ' : ' @ ') + o.op, 'Team and opponent', 'l'], ['Date', null, o => fmtDay(o.day), null, 'l'],
+    ['GmSc', 'gmsc', o => f1n(SEASON_P.gmsc.v(o)), 'Game Score', 'k'], ['MIN', 'min', o => o.min, 'Minutes'], ['PTS', 'pts', o => o.pts, 'Points'],
+    ['REB', 'reb', o => o.orb + o.drb, 'Rebounds'], ['AST', 'ast', o => o.ast, 'Assists'], ['STL', 'stl', o => o.stl, 'Steals'],
+    ['BLK', 'blk', o => o.blk, 'Blocks'], ['TO', 'tov', o => o.tov, 'Turnovers'], ['FG', 'fgm', o => o.fgm + '-' + o.fga, 'Field goals'],
+    ['3P', 'tpm', o => o.tpm + '-' + o.tpa, '3-pointers'], ['FT', 'ftm', o => o.ftm + '-' + o.fta, 'Free throws'],
+    ['TS%', 'ts', o => f1n(SEASON_P.ts.v(o)), 'True shooting % (10+ shot attempts to rank)'], ['+/-', 'pm', o => sg(o.pm), 'Plus/minus']],
+  tg: [['Opp', null, o => (o.home ? 'vs ' : '@ ') + o.op, 'Opponent', 'l'], ['Date', null, o => fmtDay(o.day), null, 'l'],
+    ['Result', null, o => (o.pts > o.opp ? 'W ' : 'L ') + o.pts + '–' + o.opp, null, 'l'],
+    ['+/-', 'mar', o => sg(o.pts - o.opp), 'Point margin', 'k'], ['PTS', 'pts', o => o.pts, 'Points scored'], ['OPP', 'opp', o => o.opp, 'Points allowed'],
+    ['ORtg', 'ortg', o => f1n(SEASON_T.ortg.v(o)), 'Points per 100 possessions'], ['DRtg', 'drtg', o => f1n(SEASON_T.drtg.v(o)), 'Points allowed per 100 possessions'],
+    ['Pace', 'pace', o => f1n(SEASON_T.pace.v(o)), 'Possessions per 48 minutes'], ['FG%', 'fgp', o => f1n(SEASON_T.fgp.v(o)), 'Field goal %'],
+    ['3PM', 'tpm', o => o.tpm, '3-pointers made'], ['3P%', 'tpp', o => f1n((100 * o.tpm) / o.tpa), '3-point % (15+ attempts to rank)'],
+    ['AST', 'ast', o => o.ast, 'Assists'], ['REB', 'reb', o => o.orb + o.drb, 'Rebounds'], ['TO', 'tov', o => o.tov, 'Turnovers'],
+    ['STL', 'stl', o => o.stl, 'Steals'], ['BLK', 'blk', o => o.blk, 'Blocks']],
+};
+
+function seasonTable(tab, vals) {
+  const def = SEASON_TABS[tab], sort = seasonState.sort[tab];
+  const wrap = el('div', 'stw'), tbl = el('table', 'st'), hr = el('tr');
+  hr.append(el('th', null, tab === 'tg' ? 'Team' : 'Player'));
+  for (const [h, k, , title, cls] of SEASON_COLS[tab]) {
+    const th = el('th', cls || null, h);
+    if (title) th.title = title;
+    if (k) {
+      th.tabIndex = 0; th.dataset.k = k;
+      if (sort.k === k) th.setAttribute('aria-sort', sort.dir > 0 ? 'ascending' : 'descending');
+      const go = () => {
+        const best = def.metrics[k].best;
+        // best games are pre-selected per column, so only the "best" direction is exact; per-game sorts both ways
+        seasonState.sort[tab] = sort.k === k && def.both ? { k, dir: -sort.dir } : { k, dir: best };
+        loadSeason();
+      };
+      th.onclick = go;
+      th.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+    }
+    hr.append(th);
+  }
+  const thead = el('thead'); thead.append(hr);
+  const tb = el('tbody');
+  let rank = 0, last;
+  vals.forEach(({ o, v }, i) => {
+    if (v !== last) { rank = i + 1; last = v; }
+    const tr = el('tr', [tab !== 'avg' && 'go', followed(o.tm) && 'fol'].filter(Boolean).join(' ') || null);
+    const first = el('td');
+    first.append(el('span', 'rk', String(rank)));
+    if (tab === 'tg') first.append(o.tm);
+    else {
+      const a = el('a', null, o.name);
+      a.href = bbref(o.name); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = o.name + ' on Basketball Reference';
+      first.append(a);
+      if (tab === 'avg') first.append(el('span', 'mu', ' ' + o.tm));
+    }
+    tr.append(first);
+    for (const [, k, cell, , cls] of SEASON_COLS[tab]) tr.append(el('td', [cls, k && k === seasonState.sort[tab].k && 'k'].filter(Boolean).join(' ') || null, String(cell(o))));
+    if (tab !== 'avg') {
+      tr.title = 'Open ' + o.tm + (o.home ? ' vs ' : ' @ ') + o.op + ', ' + fmtDay(o.day);
+      tr.onclick = e => { if (!e.target.closest('a')) openGameOn(o.day, o.gid); };
+    }
+    tb.append(tr);
+  });
+  tbl.append(thead, tb);
+  wrap.append(tbl);
+  return wrap;
+}
+
+// open a game from another day (season tables): a new history entry pointing at that day and game
+function openGameOn(day, id) {
+  pushNav();
+  history.replaceState(null, '', '#d=' + day.replaceAll('-', '') + '&g=' + id);
+  applyHash(false);
+}
+
+function syncSeasonControls() {
+  const tab = seasonState.tab;
+  $('#seasonTabs').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.s === tab)));
+  $('#seasonFind').hidden = tab === 'tg';
+  $('#seasonAllWrap').hidden = tab !== 'avg';
+  const sel = $('#seasonTeam');
+  if (!sel.options.length) {
+    sel.append(new Option('All teams', ''), new Option('Followed teams', '*'));
+    TEAMS.forEach(t => sel.append(new Option(t, t)));
+  }
+  sel.value = seasonState.team;
+  $('#seasonFind').value = seasonState.find;
+  $('#seasonAll').checked = seasonState.all;
+}
+$('#seasonTabs').querySelectorAll('button').forEach(b => (b.onclick = () => {
+  if (seasonState.tab === b.dataset.s) return;
+  pushNav(); seasonState.tab = b.dataset.s; syncSeasonControls(); writeHash(); loadSeason();
+}));
+$('#seasonTeam').onchange = e => { seasonState.team = e.target.value; loadSeason(); };
+let findTimer = 0;
+$('#seasonFind').oninput = e => { clearTimeout(findTimer); findTimer = setTimeout(() => { seasonState.find = e.target.value; loadSeason(); }, 250); };
+$('#seasonAll').onchange = e => { seasonState.all = e.target.checked; loadSeason(); };
+
 // ---------------------------------------------------------------- settings + data usage
 const CHOICES = {
   live: [5, 10, 20, 30, 60], box: [30, 60, 120, 300], others: [30, 60, 120, 300], leaders: [30, 60, 120, 300],
@@ -1268,7 +1510,7 @@ function renderUsage() {
   const nLive = state.games.filter(g => g.state === 'in').length;
   const watching = state.view === 'game' && state.gameState === 'in';
   const now = document.hidden ? 0 : listing() ? perMinute('leaders', nLive) : perMinute(watching ? 'game' : 'scores', nLive);
-  const nowWhat = listing() ? ({ home: 'Home page', leaders: 'Top performers', game: 'All games' })[state.view] + ' with ' + nLive + ' live game' + (nLive === 1 ? '' : 's')
+  const nowWhat = state.view === 'season' ? 'Season stats (loaded once, no refresh)' : listing() ? ({ home: 'Home page', leaders: 'Top performers', game: 'All games' })[state.view] + ' with ' + nLive + ' live game' + (nLive === 1 ? '' : 's')
     : watching ? 'Watching ' + (state.away?.abbr || '') + '–' + (state.home?.abbr || '') + ' live'
     : nLive ? 'Scores only (' + nLive + ' live game' + (nLive === 1 ? '' : 's') + ')' : 'No live games: nothing to refresh';
   const tbl = el('table'), th = el('tr');
@@ -1305,20 +1547,24 @@ $('#gear').onclick = () => {
 
 // ---------------------------------------------------------------- views, routing, misc
 function setStatus(sel, msg, err) { const s = $(sel); s.textContent = msg; s.classList.toggle('err', !!err); }
-const viewStatus = () => ({ game: '#status', leaders: '#ldStatus', home: '#homeStatus' })[state.view];
+const viewStatus = () => ({ game: '#status', leaders: '#ldStatus', home: '#homeStatus', season: '#seasonStatus' })[state.view];
 
 function setView(v, load = true) {
   state.view = v;
   $('#gameView').hidden = v !== 'game';
   $('#leadersView').hidden = v !== 'leaders';
   $('#homeView').hidden = v !== 'home';
+  $('#seasonView').hidden = v !== 'season';
   $('#navGame').setAttribute('aria-pressed', String(v === 'game'));
   $('#navLeaders').setAttribute('aria-pressed', String(v === 'leaders'));
+  $('#navSeason').setAttribute('aria-pressed', String(v === 'season'));
+  if (v === 'season') syncSeasonControls();
   stop('pbp'); stop('ld');
   syncMode(); writeHash(); renderGames();
   renderListing();
   if (!load) return;
-  if (listing()) loadLeaders(); else loadPBP();
+  if (v === 'season') loadSeason();
+  else if (listing()) loadLeaders(); else loadPBP();
 }
 
 function setTab(t) {
@@ -1328,10 +1574,11 @@ function setTab(t) {
   writeHash();
 }
 
-// URL: (nothing) home · #v=leaders · #g=<id> game (#v=game before one is chosen) · #d=YYYYMMDD date · #t=box mobile tab
+// URL: (nothing) home · #v=leaders · #v=season[&s=pg|tg] · #g=<id> game (#v=game before one is chosen) · #d=YYYYMMDD date · #t=box mobile tab
 function writeHash() {
   const q = new URLSearchParams();
-  if (state.view === 'leaders') q.set('v', 'leaders');
+  if (state.view === 'leaders' || state.view === 'season') q.set('v', state.view);
+  if (state.view === 'season' && seasonState.tab !== 'avg') q.set('s', seasonState.tab);
   if (state.view === 'game' && !state.gameId) q.set('v', 'game');
   if (state.date) q.set('d', state.date);
   if (state.view === 'game' && state.gameId) q.set('g', state.gameId);
@@ -1346,13 +1593,15 @@ function parseHash() {
   const q = new URLSearchParams(location.hash.slice(1));
   const g = q.get('g');
   return { date: /^\d{8}$/.test(q.get('d') || '') ? q.get('d') : null, g,
-    view: q.get('v') === 'leaders' ? 'leaders' : g || q.get('v') === 'game' ? 'game' : 'home', tab: q.get('t') === 'box' ? 'box' : 'plays' };
+    view: ['leaders', 'season'].includes(q.get('v')) ? q.get('v') : g || q.get('v') === 'game' ? 'game' : 'home',
+    tab: q.get('t') === 'box' ? 'box' : 'plays', s: ['pg', 'tg'].includes(q.get('s')) ? q.get('s') : 'avg' };
 }
 
 // Apply the URL (page load, or browser Back/Forward)
 async function applyHash(initial) {
   const h = parseHash();
   setTab(h.tab);
+  seasonState.tab = h.s;
   if (initial || h.date !== state.date) {
     state.date = h.date;
     clearGame(h.view === 'game' ? 'Loading…' : '');
@@ -1360,6 +1609,7 @@ async function applyHash(initial) {
     if (h.g) state.gameId = h.g;
     setView(h.view, false);
     if (h.view === 'game' && h.g) loadPBP();
+    if (h.view === 'season') loadSeason();
     await loadScoreboard();
     if (listing()) loadLeaders();
     return;
@@ -1395,6 +1645,7 @@ $('#allLeaders').onclick = () => go('leaders');
 // "Games" always shows the grid of all games, even from inside a game
 $('#navGame').onclick = () => { if (state.view === 'game' && !state.gameId) return; pushNav(); clearGame(); setView('game'); };
 $('#navLeaders').onclick = () => go('leaders');
+$('#navSeason').onclick = () => go('season');
 $('#tabs').querySelectorAll('button').forEach(b => (b.onclick = () => setTab(b.dataset.tab)));
 $('#period').onchange = e => { state.period = e.target.value; renderPlays(); };
 $('#order').onclick = e => { state.newest = !state.newest; e.target.textContent = state.newest ? 'Newest first' : 'Oldest first'; renderPlays(); };

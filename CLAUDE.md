@@ -30,6 +30,14 @@ Run tests: `npm test`.
 - `nextDelay()`: halftime 60 s, end of quarter 30 s (`STATUS_END_PERIOD`, verified), timeout with no change since → 30 s, any other unchanged poll → 20 s then 30 s; never faster than the user's interval. `STATUS_HALFTIME` (verified 2026-11-23); the detail text `/^half/i` is a fallback.
 - Corrections happen: ESPN rewrites earlier plays (e.g. a miss becomes a block). `updatePlays` redraws and highlights new and changed plays.
 
+## Season data (nightly build)
+- `scripts/build-season.mjs` (Node 22, no dependencies) is the one exception to "no build step": the GitHub Action `.github/workflows/season-data.yml` runs it daily at 11:23 UTC (scheduled runs use the default branch's copy of the workflow), on manual dispatch, and on pushes that change the script or workflow on `claude/season-leaders-todo`. It commits `data/` only when games were added.
+- Incremental: `data/season-games.json` is also the build state. Each run walks the scoreboard `calendar` days from `through` (last day whose regular-season games were all settled), adds `completed` regular-season games (`season.type === 2`) not yet stored, and stops at the first unsettled day.
+- Files: `season-best.json` (union of the top 50 rows for every sortable metric, players/games re-indexed; ~25 KB gzip), `season-games.json` (every player-game and team-game row; loaded by the page only when best games are filtered), `season-players.json` (per-player season totals + summed Game Score; per-game leaders).
+- Row layouts are `PCOLS`, `TCOLS`, `SCOLS` in the script; team rows carry the opponent's possession inputs so ratings need no second row. Metrics exist twice, `PMETRICS`/`TMETRICS` in the script and `SEASON_P`/`SEASON_T` in `index.html`; `test/season.test.js` checks they agree. Best-games tables sort only in each column's "best" direction (the only exact one for the top-50 union); per-game sorts both ways.
+- The page fetches `data/*.json` with `cache: 'no-cache'` (GitHub Pages sends ETags, so revisits are 304s); ESPN calls stay `no-store`.
+- Locally the script needs `NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt` in this sandbox (Node's fetch ignores HTTPS_PROXY otherwise).
+
 ## Data usage tracking
 `getJSON(url, kind)` counts bytes from `Content-Length` (CORS-safelisted, and the compressed size for gzip responses) into `usage` (this visit) and `nbapbp.usage` (since a date), and keeps a running average per kind in `nbapbp.sizes`. `perMinute()` turns settings + sizes into the estimates in the panel.
 

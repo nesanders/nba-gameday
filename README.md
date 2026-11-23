@@ -6,6 +6,7 @@ A free, ad-free, low-data NBA live dashboard: **[nsanders.me/nba-gameday](https:
 - **Games**: live play-by-play (filter by scoring plays, team or quarter) next to a full box score.
 - **Box score**: sortable by any column (starters first, then Game Score, by default); counting stats plus advanced stats computed in the browser (TS%, eFG%, USG%, AST%, TOV%, rebound/steal/block rates, Game Score), team pace, possessions, offensive/defensive rating and the four factors. Pick which team is listed first.
 - **Top performers**: leaders across every game on a given day in 12 categories.
+- **Season**: per-game averages for every player, and the season's best individual and team games, all sortable and filterable by team or player.
 - Works on phones and desktops, light and dark mode. Player names link to Basketball Reference.
 
 ## Low data by design
@@ -21,9 +22,14 @@ quarters and at halftime. Watching a whole live game uses at most about 9 MB (it
 
 The ⚙ button lets you change every refresh interval and shows the estimated and actual data used.
 
+Season stats come from small files in `data/`, rebuilt every morning by a GitHub Action
+(`scripts/build-season.mjs`), which downloads only the games finished since its last run. Opening the Season tab
+downloads about 25 KB; filtering best games by team or player loads every game of the season once
+(about 100 KB now, up to about 400 KB by April).
+
 ## Links
 
-URLs are shareable and the browser Back button works: (no hash) home, `#d=20261122` (date), `#g=<gameId>` (game), `#t=box` (box score tab on mobile), `#v=leaders` (top performers).
+URLs are shareable and the browser Back button works: (no hash) home, `#d=20261122` (date), `#g=<gameId>` (game), `#t=box` (box score tab on mobile), `#v=leaders` (top performers), `#v=season` (season; `&s=pg` or `&s=tg` for best player or team games).
 
 ## Development
 

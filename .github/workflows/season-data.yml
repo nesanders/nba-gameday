@@ -1,0 +1,38 @@
+name: Season data
+
+# Rebuilds data/season-*.json (season best games and per-game leaders) from final box scores.
+# Incremental: only games finished since the last run are downloaded.
+on:
+  schedule:
+    - cron: '23 11 * * *'        # 6:23 AM Eastern, after the last West Coast games (scheduled runs use the default branch)
+  workflow_dispatch:
+  push:
+    branches: [claude/season-leaders-todo]
+    paths: [scripts/build-season.mjs, .github/workflows/season-data.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: season-data
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build season data
+        run: node scripts/build-season.mjs
+      - name: Commit changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data
+          if git diff --cached --quiet; then echo 'No new games'; exit 0; fi
+          git commit -m "Update season data through $(node -p "require('./data/season-games.json').through")"
+          git push
