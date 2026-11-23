@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Static NBA live dashboard served by GitHub Pages at nsanders.me (`CNAME`). Everything ships in **one file, `index.html`**: vanilla JS/CSS, no build step, no runtime dependencies, no images (favicon is an inline SVG data URI). Keep it that way unless the owner agrees otherwise. `package.json`/`node_modules` exist only for tests.
+Static NBA live dashboard served by GitHub Pages at https://nsanders.me/nba-gameday (a project site under the owner's user-site domain, so all paths must stay relative). Everything ships in **one file, `index.html`**: vanilla JS/CSS, no build step, no runtime dependencies, no images (favicon is an inline SVG data URI). Keep it that way unless the owner agrees otherwise. `package.json`/`node_modules` exist only for tests.
 
 ## Layout
 - `index.html` – the whole app. Script sections: fetching (+ byte counting) → box score parsing + advanced stats (`buildBox`, Basketball-Reference formulas) → scoreboard → game view / live loop (`loadPBP`, `tickFull`, `tickLite`, `nextDelay`) → plays → box rendering → top performers → settings + data usage → views/routing.

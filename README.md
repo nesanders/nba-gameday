@@ -1,6 +1,6 @@
 # NBA Gameday
 
-A free, ad-free, low-data NBA live dashboard: **https://nsanders.me**
+A free, ad-free, low-data NBA live dashboard: **[nsanders.me/nba-gameday](https://nsanders.me/nba-gameday)**
 
 - **Games**: live play-by-play (filter by scoring plays, team or quarter) next to a full box score.
 - **Box score**: counting stats plus advanced stats computed in the browser (TS%, eFG%, USG%, AST%, TOV%, rebound/steal/block rates, Game Score), team pace, possessions, offensive/defensive rating and the four factors. Pick which team is listed first.
