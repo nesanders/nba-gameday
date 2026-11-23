@@ -46,7 +46,6 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.35rem .9rem;align-items:center}
 .setgrid label{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
 .setgrid label.ck{justify-content:flex-start}
-.setgrid .hint{grid-column:1/-1;font-size:11.5px;color:var(--muted);margin:0}
 #usage{margin-top:.55rem;font-variant-numeric:tabular-nums}
 #usage table{font-size:12.5px;margin:.25rem 0}
 #usage th,#usage td{padding:.15rem .5rem .15rem 0;border-bottom:1px solid var(--line);background:none;cursor:default}
@@ -218,8 +217,7 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
         <p class="empty" id="empty" hidden>No plays yet.</p>
       </div>
       <div id="boxPane">
-        <div class="boxbar"><span class="muted">Top:</span><span id="topSel" class="seg"></span><span class="muted" id="boxAge"></span>
-          <span class="muted" style="margin-left:auto">Click a header to sort · hover for definitions · names → Basketball Reference</span></div>
+        <div class="boxbar"><span class="muted">Top:</span><span id="topSel" class="seg"></span><span class="muted" id="boxAge"></span></div>
         <div id="box"></div>
       </div>
     </div>
@@ -1196,8 +1194,6 @@ function renderSettings() {
   const reset = el('button', null, 'Defaults');
   reset.onclick = () => { Object.assign(settings, DEFAULTS); saveSettings(); renderSettings(); retime(); };
   box.append(reset);
-  box.append(el('p', 'hint', 'Lightweight updates fetch only new plays (~2 KB) between box-score refreshes, instead of the whole game (~35 KB) every time. ' +
-    'Breaks: checks every 30s between quarters and in timeouts, every 60s at halftime. Nothing is downloaded while this tab is hidden, and finished games are never re-downloaded.'));
   renderUsage();
 }
 
@@ -1234,7 +1230,7 @@ function renderUsage() {
     : watching ? 'Watching ' + (state.away?.abbr || '') + '–' + (state.home?.abbr || '') + ' live'
     : nLive ? 'Scores only (' + nLive + ' live game' + (nLive === 1 ? '' : 's') + ')' : 'No live games: nothing to refresh';
   const tbl = el('table'), th = el('tr');
-  ['Estimated data', 'per min', 'per hour', 'per game*'].forEach(h => th.append(el('th', null, h)));
+  ['Estimated data', 'per min', 'per hour', 'per game'].forEach(h => th.append(el('th', null, h)));
   const thead = el('thead'); thead.append(th);
   const tb = el('tbody');
   const row = (label, v, cls, sub) => {
@@ -1252,7 +1248,7 @@ function renderUsage() {
   const clr = el('button', null, 'Reset');
   clr.onclick = () => { usage.total = { since: Date.now(), bytes: 0 }; store.set('nbapbp.usage', usage.total); renderUsage(); };
   used.append(clr);
-  box.replaceChildren(tbl, el('p', 'muted', '*A live game lasts about 2¼ hours. Estimates are upper bounds: polling slows during breaks. Compressed sizes, excluding this page itself (~18 KB, downloaded once).'), used);
+  box.replaceChildren(tbl, used);
 }
 
 $('#setClose').onclick = () => $('#gear').click();
