@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boot, fixture, HTML } from './harness.js';
+import { boot, fixture, HTML, defaultRoutes } from './harness.js';
 
 const FINAL = '401910029', LIVE = '401910030', PRE = '401910034';
 
@@ -108,8 +108,8 @@ test('game view: auto-selects the first live game and renders plays + box', asyn
   app.close();
 });
 
-test('live refresh appends only the new plays and highlights them', async () => {
-  const app = await boot();
+test('full refresh (lightweight updates off) appends only the new plays and highlights them', async () => {
+  const app = await boot({ storage: { 'nbapbp.settings': { lite: false } } });
   await app.settle(() => app.$$('#list li').length > 0);
   const before = app.$$('#list li').length;
   const firstEl = app.$('#list li');
@@ -211,10 +211,10 @@ test('day navigation requests the right date and shows Today button', async () =
   app.close();
 });
 
-test('fetches are simple CORS requests (no options that would trigger a preflight)', async () => {
+test('fetches bypass the HTTP cache and send no custom headers', async () => {
   const app = await boot();
   await app.settle(() => app.calls.some(c => c.key.startsWith('summary:')));
-  for (const c of app.calls) assert.equal(c.opts, undefined, c.key + ' passed fetch options');
+  for (const c of app.calls) assert.deepEqual({ ...c.opts }, { cache: 'no-store' }, c.key);   // spread: jsdom realm object
 });
 
 test('polling: selected live game every 10s, scoreboard (other games) every 60s', async () => {
@@ -228,4 +228,161 @@ test('polling: a final selected game is not polled at all', async () => {
   const app = await boot({ hash: '#g=401910029' });
   await app.settle(() => app.$('#status').textContent === 'Final.');
   assert.equal(app.delays.filter(d => d.fn === 'loadPBP').length, 0);
+});
+
+// ---------------------------------------------------------------- lightweight live updates (core API)
+const G = '401910032';   // summary captured at t0 (129 plays); core plays + status captured ~4 min later (138 plays)
+const liteRoutes = () => ({ ...defaultRoutes(), ['core:plays:' + G]: 'core-plays-' + G, ['core:status:' + G]: 'core-status-' + G });
+async function liteApp(opts = {}) {
+  const app = await boot({ hash: '#g=' + G, routes: liteRoutes(), ...opts });
+  await app.settle(() => app.$$('#list li').length === 129 && /^Live/.test(app.$('#status').textContent));
+  app.calls.length = 0; app.delays.length = 0;
+  return app;
+}
+const tick = async (app, until) => { app.eval('loadPBP()'); await app.settle(until); };
+
+test('lite tick: fetches status + one page of plays, appends new plays, updates score', async () => {
+  const app = await liteApp();
+  const core = fixture('core-plays-' + G).items;
+  await tick(app, () => app.$$('#list li').length === core.length);
+  assert.deepEqual(app.calls.map(c => c.key).sort(), ['core:plays:' + G, 'core:status:' + G]);
+  // 9 new plays + 1 real correction ESPN made to an existing play ("misses jumper" -> "... blocks ...")
+  assert.equal(app.$$('#list li.new').length, core.length - 129 + 1);
+  assert.ok(app.$$('#list li.new .tx').some(t => /Trevon Brazile blocks Josh Giddey/.test(t.textContent)));
+  assert.ok(!app.$$('#list li .tx').some(t => t.firstChild.textContent === 'Josh Giddey misses 5-foot jumper'));
+  const last = core.at(-1);
+  assert.deepEqual(app.$$('#score .pts').map(e => e.textContent), [String(last.awayScore), String(last.homeScore)]);
+  assert.match(app.$('#score .mid').textContent, new RegExp(fixture('core-status-' + G).displayClock));
+  assert.equal(app.$('#list li .tx').firstChild.textContent, last.text);
+  // team abbreviation comes from the $ref team id
+  const teamPlay = core.findLast(p => p.team);
+  const li = app.$$('#list li').find(x => x.querySelector('.tx').firstChild.textContent === teamPlay.text);
+  assert.match(li.querySelector('.tm').textContent, /^[A-Z]{2,4}$/);
+  // box header scores follow the live score
+  assert.deepEqual(app.$$('.th[data-team] .pts').map(e => e.textContent).sort(), [String(last.awayScore), String(last.homeScore)].sort());
+});
+
+test('lite: box refreshes via full summary only when due AND new plays arrived', async () => {
+  const app = await liteApp();
+  await tick(app, () => app.calls.length === 2);                       // lite tick, new plays -> dirty
+  app.eval('live.lastBox = Date.now() - 61000');
+  app.calls.length = 0;
+  await tick(app, () => app.calls.length >= 1);
+  assert.deepEqual(app.calls.map(c => c.key), ['summary:' + G]);
+  app.eval('live.lastBox = Date.now() - 600000; live.dirty = false');   // stale box but nothing new: stay lite
+  app.calls.length = 0;
+  await tick(app, () => app.calls.length >= 2);
+  assert.ok(app.calls.every(c => c.key.startsWith('core:')));
+});
+
+test('lite: more than a page behind -> one full refresh instead of paging', async () => {
+  const app = await liteApp();
+  app.eval('state.plays = state.plays.slice(0, 100)');
+  await tick(app, () => app.calls.some(c => c.key.startsWith('summary:')));
+  assert.equal(app.calls.filter(c => c.key === 'core:plays:' + G).length, 1);
+});
+
+test('lite: falls back to full summaries after two failures', async () => {
+  const app = await liteApp({ routes: defaultRoutes() });               // no core routes -> 404
+  for (let i = 1; i <= 2; i++) await tick(app, () => app.calls.filter(c => c.key === 'core:status:' + G).length === i && app.delays.length === i);
+  app.calls.length = 0;
+  await tick(app, () => app.calls.length >= 1);
+  assert.deepEqual(app.calls.map(c => c.key), ['summary:' + G]);
+});
+
+test('lite updates off: every tick is a full summary', async () => {
+  const app = await liteApp({ storage: { 'nbapbp.settings': { lite: false } } });
+  await tick(app, () => app.calls.length >= 1);
+  assert.deepEqual(app.calls.map(c => c.key), ['summary:' + G]);
+});
+
+// ---------------------------------------------------------------- breaks
+test('end of quarter (real capture): checks every 30s and says so', async () => {
+  const routes = { ...defaultRoutes(), 'summary:401910033': 'summary-401910033-endq' };
+  const app = await boot({ hash: '#g=401910033', routes });
+  await app.settle(() => app.delays.some(d => d.fn === 'loadPBP'));
+  assert.equal(app.delays.find(d => d.fn === 'loadPBP').ms, 30000);
+  assert.match(app.$('#status').textContent, /Between quarters, checking every 30s/);
+  assert.match(app.$('#score .mid').textContent, /End of 1st/);
+});
+
+test('break, timeout and idle back-off rules', async () => {
+  const app = await liteApp();
+  const delay = (st, idle = 0, lastType = 'Jump Shot', s = {}) => {
+    app.eval(`Object.assign(settings, ${JSON.stringify({ live: 10, breaks: true, ...s })});
+      state.gameState = 'in'; state.statusName = ${JSON.stringify(st.name)}; state.detail = ${JSON.stringify(st.detail)};
+      live.idle = ${idle}; state.plays.at(-1).type = ${JSON.stringify(lastType)};`);
+    return app.eval('nextDelay()');
+  };
+  const play = { name: 'STATUS_IN_PROGRESS', detail: '5:25 - 3rd' };
+  assert.equal(delay(play), 10000);
+  assert.equal(delay({ name: 'STATUS_HALFTIME', detail: 'Halftime' }), 60000);
+  assert.equal(delay({ name: 'STATUS_END_PERIOD', detail: 'End of 3rd' }), 30000);
+  assert.equal(delay(play, 0, 'Full Timeout'), 10000);                   // timeout just called: check once more soon
+  assert.equal(delay(play, 1, 'Full Timeout'), 30000);
+  assert.deepEqual([1, 2, 3, 9].map(i => delay(play, i)), [20000, 30000, 30000, 30000]);
+  assert.equal(delay({ name: 'STATUS_HALFTIME', detail: 'Halftime' }, 0, 'x', { breaks: false }), 10000);
+  assert.equal(delay(play, 2, 'x', { live: 60 }), 60000);                // never faster than the chosen interval
+});
+
+test('idle back-off in practice: identical responses slow polling to 20s then 30s', async () => {
+  const app = await liteApp();
+  await tick(app, () => app.delays.length === 1);   // new plays
+  await tick(app, () => app.delays.length === 2);   // same
+  await tick(app, () => app.delays.length === 3);   // same
+  assert.deepEqual(app.delays.map(d => d.ms), [10000, 20000, 30000]);
+  assert.match(app.$('#status').textContent, /Play stopped, checking every 30s/);
+});
+
+// ---------------------------------------------------------------- settings + usage
+test('estimates: lite vs full per-minute math', async () => {
+  const app = await boot();
+  await app.settle(() => /^Live/.test(app.$('#status').textContent));
+  app.eval('Object.assign(SIZE, { summary: 34000, plays: 2300, status: 300, scoreboard: 13000 }); Object.assign(settings, DEFAULTS)');
+  assert.equal(Math.round(app.eval("perMinute('game', 1)")), 6 * 2600 + 34000 + 13000);
+  app.eval('settings.lite = false');
+  assert.equal(Math.round(app.eval("perMinute('game', 1)")), 6 * 34000 + 13000);
+  assert.equal(Math.round(app.eval("perMinute('leaders', 5)")), 5 * 34000 + 13000);
+  assert.equal(app.eval("perMinute('scores', 0)"), 0);
+});
+
+test('settings panel: opens, saves, re-times pending polls, shows usage', async () => {
+  const app = await boot();
+  await app.settle(() => app.delays.some(d => d.fn === 'loadScoreboard') && app.delays.some(d => d.fn === 'loadPBP'));
+  assert.equal(app.$('#settings').hidden, true);
+  app.$('#gear').click();
+  assert.equal(app.$('#settings').hidden, false);
+  assert.equal(app.$('#gear').getAttribute('aria-expanded'), 'true');
+  const sels = app.$$('#setControls select');
+  assert.equal(sels.length, 4);
+  assert.equal(sels[0].value, '10');
+  app.delays.length = 0;
+  sels[2].value = '30'; sels[2].dispatchEvent(new app.window.Event('change'));          // other games: 60s -> 30s
+  assert.equal(JSON.parse(app.window.localStorage.getItem('nbapbp.settings')).others, 30);
+  assert.deepEqual(app.delays.map(d => [d.fn, d.ms]), [['loadScoreboard', 30000]]);    // pending 60s poll pulled in
+  const usage = app.$('#usage').textContent;
+  assert.match(usage, /Right nowWatching OKC–MIA live/);
+  assert.match(usage, /Used this visit: \d+ KB in \d+ requests/);
+  const lite = app.$$('#setControls input[type=checkbox]')[1];                         // lite off disables box interval
+  lite.checked = false; lite.dispatchEvent(new app.window.Event('change'));
+  assert.equal(app.$$('#setControls select')[1].disabled, true);
+  app.$$('#setControls button').find(b => b.textContent === 'Defaults').click();
+  assert.equal(app.eval('settings.lite'), true);
+  assert.equal(app.eval('settings.others'), 60);
+});
+
+test('a later scoreboard response does not overwrite the watched game tile with older data', async () => {
+  const app = await liteApp();   // scoreboard fixture is older (21–21, 1st) than the game summary (38–41, 2nd)
+  app.eval('loadScoreboard()');
+  await app.settle(() => app.calls.some(c => c.key === 'scoreboard'));
+  await app.settle(() => /2nd/.test(app.$$('#games .g').find(b => b.textContent.startsWith('DEN')).textContent));
+  const tile = app.$$('#games .g').find(b => b.textContent.startsWith('DEN'));
+  assert.match(tile.textContent, /38.*41/);
+});
+
+test('usage counters accumulate and persist', async () => {
+  const app = await boot();
+  await app.settle(() => app.eval('usage.requests') >= 2);
+  const total = JSON.parse(app.window.localStorage.getItem('nbapbp.usage'));
+  assert.ok(total.bytes > 0 && total.bytes === app.eval('usage.total.bytes'));
 });

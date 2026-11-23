@@ -28,6 +28,7 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .bar{display:flex;align-items:center;gap:.4rem;padding:.4rem 0;flex-wrap:wrap}
 .bar h1{font-size:1rem;margin:0;white-space:nowrap}
 .bar .sp{flex:1}
+.bar .sm{display:none}
 #day{font-variant-numeric:tabular-nums;min-width:6.2em;text-align:center;color:var(--muted)}
 #games{display:flex;gap:.4rem;overflow-x:auto;padding:0 0 .45rem;scrollbar-width:thin}
 .g{flex:0 0 auto;min-width:118px;text-align:left;padding:.3rem .5rem;font-variant-numeric:tabular-nums;font-size:13px}
@@ -35,7 +36,22 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .g .s{font-size:11px;color:var(--muted)}
 .g.live .s{color:var(--live);font-weight:600}
 .g[aria-current=true]{outline:2px solid var(--accent);outline-offset:-1px}
-@media (max-width:520px){.bar h1{display:none}.bar{gap:.3rem}#day{min-width:4.6em}}
+/* settings panel */
+#settings{border-top:1px solid var(--line);padding:.5rem 0 .6rem;max-height:70vh;overflow-y:auto;font-size:13px}
+.setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.35rem .9rem;align-items:center}
+.setgrid label{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.setgrid label.ck{justify-content:flex-start}
+.setgrid .hint{grid-column:1/-1;font-size:11.5px;color:var(--muted);margin:0}
+#usage{margin-top:.55rem;font-variant-numeric:tabular-nums}
+#usage table{font-size:12.5px;margin:.25rem 0}
+#usage th,#usage td{padding:.15rem .5rem .15rem 0;border-bottom:1px solid var(--line);background:none;cursor:default}
+#usage table{width:100%;max-width:560px}
+#usage th:first-child,#usage td:first-child{text-align:left;white-space:normal}
+#usage td .sub{display:block;font-size:11px;font-weight:400;color:var(--muted)}
+.setgrid>button{justify-self:start}
+#usage p{margin:.25rem 0}
+#usage .now{font-weight:600}
+@media (max-width:520px){.bar h1{display:none}.bar .lg{display:none}.bar .sm{display:inline}.bar{gap:.3rem}#day{min-width:4.6em}}
 
 main{padding-top:.6rem;padding-bottom:1.5rem}
 .status{font-size:12px;color:var(--muted);margin:.3rem 0;min-height:1em}
@@ -124,13 +140,18 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
       <h1>🏀 NBA Live</h1>
       <span class="seg" role="group" aria-label="View">
         <button id="navGame" aria-pressed="true">Games</button>
-        <button id="navLeaders" aria-pressed="false">Top performers</button>
+        <button id="navLeaders" aria-pressed="false"><span class="lg">Top performers</span><span class="sm">Leaders</span></button>
       </span>
       <span class="sp"></span>
       <button id="prev" aria-label="Previous day">‹</button>
       <span id="day">Today</span>
       <button id="next" aria-label="Next day">›</button>
       <button id="today" hidden>Today</button>
+      <button id="gear" aria-label="Settings" aria-expanded="false" aria-controls="settings" title="Refresh speed &amp; data usage">⚙</button>
+    </div>
+    <div id="settings" hidden>
+      <div class="setgrid" id="setControls"></div>
+      <div id="usage"></div>
     </div>
     <div id="games" role="list" aria-label="Games"></div>
   </div>
@@ -157,7 +178,7 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
         <p class="empty" id="empty" hidden>No plays yet.</p>
       </div>
       <div id="boxPane">
-        <div class="boxbar"><span class="muted">Top:</span><span id="topSel" class="seg"></span>
+        <div class="boxbar"><span class="muted">Top:</span><span id="topSel" class="seg"></span><span class="muted" id="boxAge"></span>
           <span class="muted" style="margin-left:auto">Hover/tap headers for definitions · names → Basketball Reference</span></div>
         <div id="box"></div>
       </div>
@@ -176,9 +197,11 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
 <script>
 'use strict';
 const API = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
-// selected live game: every 10s. Every other game comes from one scoreboard request, refreshed once a minute.
-const MS = { livePbp: 10000, liveSb: 60000, preSb: 300000, prePbp: 60000, leaders: 60000, err: 30000 };
+const CORE = 'https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/events/';
+const MS = { preSb: 300000, prePbp: 60000, err: 30000 };
 const LEADER_CONCURRENCY = 3;
+const PAGE = 25;              // plays per lightweight page request
+const FULL_GAME_MIN = 135;    // a live NBA game lasts ~2h15m of wall-clock time
 
 const $ = s => document.querySelector(s);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -187,32 +210,56 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* full or blocked */ } },
 };
 
+// user-adjustable refresh intervals, in seconds (settings panel)
+const DEFAULTS = { live: 10, box: 60, others: 60, leaders: 60, breaks: true, lite: true };
+const settings = { ...DEFAULTS, ...(store.get('nbapbp.settings') || {}) };
+const sec = k => settings[k] * 1000;
+
 const state = {
   view: 'game',      // 'game' | 'leaders'
   tab: 'plays',      // mobile tab in game view
   date: null,        // YYYYMMDD; null = ESPN's "today"
   dayDate: null,     // YYYY-MM-DD reported by ESPN
   games: [],
-  gameId: null, gameState: null,
+  gameId: null, gameState: null, statusName: '', clock: '', detail: '',
   away: null, home: null,
   plays: [], filter: 'all', period: 'all', newest: true,
   box: null,
   top: store.get('nbapbp.top'),   // team abbreviation the user wants on top
 };
 const timers = { sb: 0, pbp: 0, ld: 0 };
+const due = {};                   // timer key -> { fn, at } for pending timers, so a settings change can re-time them
+function sched(k, fn, ms) { clearTimeout(timers[k]); timers[k] = setTimeout(fn, ms); due[k] = { fn, at: Date.now() + ms }; }
+function stop(k) { clearTimeout(timers[k]); delete due[k]; }
+// per selected game: when the box was last fetched, whether plays arrived since, how long nothing has changed
+let live = {};
+const resetLive = () => (live = { lastBox: 0, dirty: false, idle: 0, sig: '', mode: 'live', liteFails: 0 });
+resetLive();
 const leaders = new Map();        // gameId -> { final, rows }
 let sections = new Map(), periodCount = 0, filterKey = '';
 
 // ---------------------------------------------------------------- fetching
-async function getJSON(url) {
-  // Plain GET with no options on purpose. cache:'no-cache' (or any custom header) adds a non-safelisted
-  // Cache-Control request header -> CORS preflight -> the API answers OPTIONS with 403 and the fetch fails.
-  // The API sends no ETag/Last-Modified (so 304s are impossible) and max-age<=10s, so default caching is fine.
-  const r = await fetch(url);
+// Typical compressed response sizes in bytes (measured Nov 2026); replaced by a running average of what we see.
+const SIZE = { summary: 34000, plays: 2300, status: 300, scoreboard: 13000, ...(store.get('nbapbp.sizes') || {}) };
+const usage = { bytes: 0, requests: 0, total: store.get('nbapbp.usage') || { since: Date.now(), bytes: 0 } };
+
+async function getJSON(url, kind) {
+  // 'no-store': responses have no ETag/Last-Modified (no 304s possible) and the core API allows
+  // stale-while-revalidate, so a cached copy could be served stale. (Cache modes don't trigger a CORS preflight.)
+  const r = await fetch(url, { cache: 'no-store' });
   if (!r.ok) throw new Error('HTTP ' + r.status);
-  return r.json();
+  const text = await r.text();
+  // Content-Length is CORS-safelisted; for gzip responses it is the on-the-wire size. Fallback: typical ~9:1 gzip ratio.
+  const bytes = +r.headers.get('content-length') || Math.round(text.length * 0.11);
+  usage.bytes += bytes; usage.requests++; usage.total.bytes += bytes;
+  store.set('nbapbp.usage', usage.total);
+  if (kind) { SIZE[kind] = Math.round(0.7 * SIZE[kind] + 0.3 * bytes); store.set('nbapbp.sizes', SIZE); }
+  if (!$('#settings').hidden) renderUsage();
+  return JSON.parse(text);
 }
 const summaryUrl = id => API + '/summary?event=' + id;
+const coreUrl = (id, path) => CORE + id + '/competitions/' + id + '/' + path;
+const refId = (ref, kind) => (String(ref || '').match(new RegExp('/' + kind + '/(\\d+)')) || [])[1] || null;
 const bbref = name => 'https://www.basketball-reference.com/search/search.fcgi?search=' + encodeURIComponent(name);
 
 function team(c) {
@@ -337,24 +384,30 @@ function buildBox(s) {
 
 // ---------------------------------------------------------------- scoreboard
 async function loadScoreboard() {
-  clearTimeout(timers.sb);
+  stop('sb');
   let delay = 0;
   try {
-    const d = await getJSON(API + '/scoreboard' + (state.date ? '?dates=' + state.date : ''));
+    const d = await getJSON(API + '/scoreboard' + (state.date ? '?dates=' + state.date : ''), 'scoreboard');
     state.dayDate = d.day?.date || d.events?.[0]?.date?.slice(0, 10) || null;
     state.games = (d.events || []).map(parseEvent);
+    // the watched game is refreshed more often than the scoreboard: keep our fresher score/clock on its tile
+    const sel = state.view === 'game' && state.detail && state.games.find(g => g.id === state.gameId);
+    if (sel && state.away && state.home) {
+      Object.assign(sel, { state: state.gameState, detail: state.detail });
+      sel.away.score = state.away.score; sel.home.score = state.home.score;
+    }
     renderDay(); renderGames();
     if (!state.games.some(g => g.id === state.gameId)) {
       const pick = state.games.find(g => g.state === 'in') || state.games.find(g => g.state === 'pre') || state.games[0];
       if (pick) selectGame(pick.id); else clearGame('No games on this day.');
     }
-    if (state.games.some(g => g.state === 'in')) delay = MS.liveSb;
+    if (state.games.some(g => g.state === 'in')) delay = sec('others');
     else if (state.games.some(g => g.state === 'pre')) delay = MS.preSb;
   } catch (e) {
     setStatus('#status', 'Couldn’t load scoreboard (' + e.message + '). Retrying…', true);
     delay = MS.err;
   }
-  if (delay && !document.hidden) timers.sb = setTimeout(loadScoreboard, delay);
+  if (delay && !document.hidden) sched('sb', loadScoreboard, delay);
 }
 
 function renderDay() {
@@ -389,7 +442,7 @@ function openGame(id) { if (state.view !== 'game') setView('game', false); selec
 
 function selectGame(id) {
   if (id === state.gameId && (state.plays.length || state.box)) { renderGames(); return; }
-  clearTimeout(timers.pbp);
+  stop('pbp'); resetLive();
   Object.assign(state, { gameId: id, plays: [], box: null, filter: 'all', period: 'all' });
   periodCount = 0; filterKey = '';
   $('#period').replaceChildren(new Option('All', 'all'));
@@ -402,7 +455,7 @@ function selectGame(id) {
 }
 
 function clearGame(msg) {
-  clearTimeout(timers.pbp);
+  stop('pbp'); resetLive();
   Object.assign(state, { gameId: null, plays: [], box: null });
   $('#score').hidden = true; $('#controls').hidden = true;
   $('#list').replaceChildren(); sections = new Map();
@@ -412,39 +465,101 @@ function clearGame(msg) {
   writeHash();
 }
 
+// Live game loop. The first load and each box-score refresh fetch the full summary (~34 KB). In between, the
+// "lightweight" path fetches the game status (~0.3 KB) plus only the page of plays past what we already have
+// (~2 KB). The box is refreshed every settings.box seconds, and only if new plays arrived since the last one.
 async function loadPBP() {
-  clearTimeout(timers.pbp);
+  stop('pbp');
   const id = state.gameId;
   if (!id || state.view !== 'game') return;
-  let delay = 0;
+  let delay = 0, lite = false;
   try {
-    const s = await getJSON(summaryUrl(id));
-    if (id !== state.gameId) return;                // switched games mid-request
-    const comp = s.header?.competitions?.[0] || {};
-    const cs = (comp.competitors || []).map(team);
-    state.away = cs.find(c => c.homeAway === 'away') || state.away;
-    state.home = cs.find(c => c.homeAway === 'home') || state.home;
-    const st = comp.status?.type || {};
-    const detail = st.shortDetail || st.detail || '';
-    state.gameState = st.state || state.gameState;
-    renderScore(detail);
-    renderFilters();
-    updatePlays(s.plays || []);
-    state.box = buildBox(s);
-    renderBox();
-    if (state.box) ingestLeaders(id, state.box, state.gameState === 'post');   // free refresh for the leaders page
-    syncStrip(detail);
-    delay = state.gameState === 'in' ? MS.livePbp : state.gameState === 'pre' ? MS.prePbp : 0;
-    setStatus('#status', state.gameState === 'in'
-      ? 'Live · updated ' + new Date().toLocaleTimeString() + ' · refreshing every ' + MS.livePbp / 1000 + 's'
+    lite = settings.lite && live.liteFails < 2 && state.gameState === 'in' && live.lastBox > 0 &&
+      !(live.dirty && Date.now() - live.lastBox >= sec('box'));
+    if (lite) await tickLite(id); else await tickFull(id);
+    if (id !== state.gameId) return;
+    live.liteFails = 0;
+    const sig = (state.plays.at(-1)?.id || '') + '|' + state.clock + '|' + state.statusName;
+    live.idle = sig === live.sig ? live.idle + 1 : 0;
+    live.sig = sig;
+    delay = nextDelay();
+    setStatus('#status', state.gameState === 'in' ? liveStatus(delay)
       : state.gameState === 'pre' ? 'Game hasn’t started yet.' : 'Final.');
   } catch (e) {
     if (id !== state.gameId) return;
-    setStatus('#status', 'Couldn’t load game (' + e.message + '). Retrying…', true);
-    delay = MS.err;
+    if (lite) { live.liteFails++; delay = sec('live'); }   // after 2 failures in a row, fall back to full summaries
+    else { setStatus('#status', 'Couldn’t load game (' + e.message + '). Retrying…', true); delay = MS.err; }
   }
-  if (delay && !document.hidden && state.view === 'game') timers.pbp = setTimeout(loadPBP, delay);
+  if (delay && !document.hidden && state.view === 'game') sched('pbp', loadPBP, delay);
 }
+
+function applyStatus(st) {
+  const t = st?.type || {};
+  state.gameState = t.state || state.gameState;
+  state.statusName = t.name || '';
+  state.clock = st?.displayClock ?? '';
+  state.detail = t.shortDetail || t.detail || '';
+}
+
+async function tickFull(id) {
+  const s = await getJSON(summaryUrl(id), 'summary');
+  if (id !== state.gameId) return;
+  const comp = s.header?.competitions?.[0] || {};
+  const cs = (comp.competitors || []).map(team);
+  state.away = cs.find(c => c.homeAway === 'away') || state.away;
+  state.home = cs.find(c => c.homeAway === 'home') || state.home;
+  applyStatus(comp.status);
+  renderScore(state.detail);
+  renderFilters();
+  updatePlays((s.plays || []).map(norm));
+  state.box = buildBox(s);
+  renderBox();
+  if (state.box) ingestLeaders(id, state.box, state.gameState === 'post');   // free refresh for the leaders page
+  live.lastBox = Date.now(); live.dirty = false;
+  $('#boxAge').textContent = state.gameState === 'in' && state.box ? 'updated ' + new Date().toLocaleTimeString() : '';
+  syncStrip(state.detail);
+}
+
+async function tickLite(id) {
+  const page = Math.floor(state.plays.length / PAGE) + 1;   // the page holding the first play we don't have yet
+  const [st, pg] = await Promise.all([getJSON(coreUrl(id, 'status'), 'status'),
+    getJSON(coreUrl(id, 'plays?limit=' + PAGE + '&page=' + page), 'plays')]);
+  if (id !== state.gameId) return;
+  // more than a page behind (e.g. back from a hidden tab), or the game just ended: one full refresh instead
+  if ((pg.pageCount || 0) > page || st?.type?.state === 'post') return tickFull(id);
+  const plays = state.plays.slice(), at = new Map(plays.map((p, i) => [p.id, i]));
+  for (const raw of pg.items || []) {
+    const p = normCore(raw), i = at.get(p.id);
+    if (i == null) { at.set(p.id, plays.length); plays.push(p); } else plays[i] = p;   // new play, or a correction
+  }
+  if (plays.length > state.plays.length) live.dirty = true;
+  applyStatus(st);
+  const last = plays.at(-1);
+  if (last?.away != null && state.away && state.home) { state.away.score = String(last.away); state.home.score = String(last.home); }
+  renderScore(state.detail);
+  updatePlays(plays);
+  if (state.box) $('#box').querySelectorAll('.th').forEach(h => {      // keep the box headers' scores current
+    const t = teamById(h.dataset.team); if (t) h.querySelector('.pts').textContent = t.score;
+  });
+  syncStrip(state.detail);
+}
+
+// How long to wait before the next live poll. During breaks nothing changes, so check less often.
+function nextDelay() {
+  live.mode = 'live';
+  if (state.gameState === 'pre') return MS.prePbp;
+  if (state.gameState !== 'in') return 0;
+  const base = sec('live');
+  if (!settings.breaks) return base;
+  if (state.statusName === 'STATUS_HALFTIME' || /^half/i.test(state.detail)) { live.mode = 'Halftime'; return Math.max(base, 60000); }
+  if (state.statusName === 'STATUS_END_PERIOD' || /^end of/i.test(state.detail)) { live.mode = 'Between quarters'; return Math.max(base, 30000); }
+  if (live.idle > 0 && /timeout/i.test(state.plays.at(-1)?.type || '')) { live.mode = 'Timeout'; return Math.max(base, 30000); }
+  // nothing changed since the last poll (review, injury, foul shots being set up…): back off gradually, up to 30s
+  if (live.idle > 0) { live.mode = 'Play stopped'; return Math.max(base, Math.min(30000, base * (1 + live.idle))); }
+  return base;
+}
+const liveStatus = delay => 'Live · updated ' + new Date().toLocaleTimeString() + ' · ' +
+  (live.mode === 'live' ? 'refreshing every ' + delay / 1000 + 's' : live.mode + ', checking every ' + delay / 1000 + 's');
 
 function syncStrip(detail) {
   const g = state.games.find(x => x.id === state.gameId);
@@ -474,14 +589,16 @@ function renderScore(detail) {
 
 // ---------------------------------------------------------------- plays
 const norm = p => ({
-  id: String(p.id ?? p.sequenceNumber), text: p.text || p.type?.text || '',
+  id: String(p.id ?? p.sequenceNumber), text: p.text || p.type?.text || '', type: p.type?.text || '',
   period: p.period?.number || 0, clock: p.clock?.displayValue || '',
   teamId: p.team?.id != null ? String(p.team.id) : null,
   scoring: !!p.scoringPlay, value: p.scoreValue || 0, away: p.awayScore, home: p.homeScore,
 });
+// core-API plays link the team as a $ref URL (…/teams/14?…) instead of an object with an id
+const normCore = p => ({ ...norm(p), teamId: refId(p.team?.$ref, 'teams') });
 
-function updatePlays(raw) {
-  const plays = raw.map(norm), prev = state.plays;
+function updatePlays(plays) {
+  const prev = state.plays;
   // append-only if the tail we already rendered is unchanged; otherwise (corrections, deletions) redraw
   const k = Math.max(0, prev.length - 3);
   const appendOnly = prev.length > 0 && plays.length >= prev.length &&
@@ -489,7 +606,7 @@ function updatePlays(raw) {
   state.plays = plays;
   updatePeriods();
   if (appendOnly) plays.slice(prev.length).forEach(p => insertPlay(p, true));
-  else renderPlays();
+  else renderPlays(prev.length ? new Map(prev.map(p => [p.id, p.text])) : null);   // highlight new + corrected plays
   $('#controls').hidden = plays.length === 0;
   $('#empty').hidden = $('#list').children.length > 0;
 }
@@ -531,9 +648,9 @@ function insertPlay(p, isNew) {
   state.newest ? ul.prepend(li) : ul.append(li);
 }
 
-function renderPlays() {
+function renderPlays(known) {   // known: id -> text before this update, to highlight what changed
   $('#list').replaceChildren(); sections = new Map();
-  for (const p of state.plays) insertPlay(p, false);
+  for (const p of state.plays) insertPlay(p, !!known && known.get(p.id) !== p.text);
   $('#empty').hidden = $('#list').children.length > 0;
 }
 
@@ -674,6 +791,7 @@ function teamSummary(order) {
 
 function teamTable(T) {
   const head = el('div', 'th');
+  head.dataset.team = T.id;
   const ab = el('span', 'ab', T.abbr);
   if (T.color) ab.style.setProperty('--c', T.color);
   const score = teamById(T.id)?.score ?? T.tot.pts;
@@ -776,20 +894,20 @@ async function pool(items, n, fn) {
 }
 
 async function loadLeaders() {
-  clearTimeout(timers.ld);
+  stop('ld');
   if (state.view !== 'leaders') return;
   const date = state.date;
   const started = state.games.filter(g => g.state !== 'pre');
   const todo = started.filter(g => {
     if (!leaders.has(g.id)) { const c = store.get('nbapbp.box.' + g.id); if (c) leaders.set(g.id, c); }
     const c = leaders.get(g.id);
-    return !(c && (c.final || Date.now() - (c.at || 0) < MS.leaders / 2));   // skip finals and just-fetched games
+    return !(c && (c.final || Date.now() - (c.at || 0) < sec('leaders') / 2));   // skip finals and just-fetched games
   });
   if (todo.length) setStatus('#ldStatus', 'Loading ' + todo.length + ' game' + (todo.length > 1 ? 's' : '') + '…');
   let failed = 0;
   await pool(todo, LEADER_CONCURRENCY, async g => {
     try {
-      const s = await getJSON(summaryUrl(g.id));
+      const s = await getJSON(summaryUrl(g.id), 'summary');
       const box = buildBox(s);
       const st = s.header?.competitions?.[0]?.status?.type?.state;
       if (box) ingestLeaders(g.id, box, st === 'post');
@@ -797,12 +915,12 @@ async function loadLeaders() {
   });
   if (state.view !== 'leaders' || date !== state.date) return;
   renderLeaders();
-  const live = state.games.some(g => g.state === 'in'), pre = state.games.some(g => g.state === 'pre');
+  const anyLive = state.games.some(g => g.state === 'in'), pre = state.games.some(g => g.state === 'pre');
   const msg = !state.games.length ? 'No games on this day.'
     : !started.length ? 'No games have started yet.'
-    : started.length + ' of ' + state.games.length + ' games · updated ' + new Date().toLocaleTimeString() + (live ? ' · live games refresh every ' + MS.leaders / 1000 + 's' : '');
+    : started.length + ' of ' + state.games.length + ' games · updated ' + new Date().toLocaleTimeString() + (anyLive ? ' · live games refresh every ' + settings.leaders + 's' : '');
   setStatus('#ldStatus', failed ? msg + ' · ' + failed + ' failed to load' : msg, !!failed);
-  if ((live || pre || failed) && !document.hidden) timers.ld = setTimeout(loadLeaders, live || failed ? MS.leaders : MS.preSb);
+  if ((anyLive || pre || failed) && !document.hidden) sched('ld', loadLeaders, anyLive || failed ? sec('leaders') : MS.preSb);
 }
 
 function renderLeaders() {
@@ -842,6 +960,105 @@ function renderLeaders() {
   }
 }
 
+// ---------------------------------------------------------------- settings + data usage
+const CHOICES = {
+  live: [5, 10, 20, 30, 60], box: [30, 60, 120, 300], others: [30, 60, 120, 300], leaders: [30, 60, 120, 300],
+};
+const SET_LABELS = { live: 'Watched live game', box: 'Its box score', others: 'Other games (scores)', leaders: 'Top performers' };
+const fmtSec = n => (n < 60 ? n + 's' : n / 60 + ' min');
+const fmtB = b => (b < 1e3 ? Math.round(b) + ' B' : b < 1e6 ? Math.round(b / 1e3) + ' KB' : (b / 1e6).toFixed(b < 1e7 ? 1 : 0) + ' MB');
+
+function renderSettings() {
+  const box = $('#setControls');
+  box.replaceChildren();
+  for (const k of Object.keys(CHOICES)) {
+    const lab = el('label', null, SET_LABELS[k]);
+    const sel = el('select');
+    for (const n of CHOICES[k]) sel.append(new Option('every ' + fmtSec(n), String(n)));
+    sel.value = String(settings[k]);
+    sel.disabled = k === 'box' && !settings.lite;
+    sel.onchange = () => saveSetting(k, +sel.value);
+    lab.append(sel);
+    box.append(lab);
+  }
+  for (const [k, text] of [['breaks', 'Slow down during timeouts & breaks'], ['lite', 'Lightweight play updates']]) {
+    const lab = el('label', 'ck');
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = settings[k];
+    cb.onchange = () => saveSetting(k, cb.checked);
+    lab.append(cb, document.createTextNode(text));
+    box.append(lab);
+  }
+  const reset = el('button', null, 'Defaults');
+  reset.onclick = () => { Object.assign(settings, DEFAULTS); store.set('nbapbp.settings', settings); renderSettings(); retime(); };
+  box.append(reset);
+  box.append(el('p', 'hint', 'Lightweight updates fetch only new plays (~2 KB) between box-score refreshes, instead of the whole game (~35 KB) every time. ' +
+    'Breaks: checks every 30s between quarters and in timeouts, every 60s at halftime. Nothing is downloaded while this tab is hidden, and finished games are never re-downloaded.'));
+  renderUsage();
+}
+
+function saveSetting(k, v) {
+  settings[k] = v;
+  store.set('nbapbp.settings', settings);
+  if (k === 'lite') renderSettings(); else renderUsage();
+  retime();
+}
+
+// After a setting changes, bring forward any pending poll that is now further away than its new interval.
+function retime() {
+  const base = { sb: sec('others'), pbp: sec('live'), ld: sec('leaders') };
+  for (const [k, d] of Object.entries(due)) if (d.at - Date.now() > base[k]) sched(k, d.fn, base[k]);
+}
+
+// Estimated bytes per minute, from the settings and the average response sizes seen so far.
+function perMinute(kind, nLive) {
+  const per = s => 60 / s;
+  const scores = nLive > 0 ? per(settings.others) * SIZE.scoreboard : 0;
+  if (kind === 'game') return scores + (settings.lite
+    ? per(settings.live) * (SIZE.plays + SIZE.status) + per(Math.max(settings.box, settings.live)) * SIZE.summary
+    : per(settings.live) * SIZE.summary);
+  if (kind === 'leaders') return scores + nLive * per(settings.leaders) * SIZE.summary;
+  return scores;
+}
+
+function renderUsage() {
+  const box = $('#usage');
+  const nLive = state.games.filter(g => g.state === 'in').length;
+  const watching = state.view === 'game' && state.gameState === 'in';
+  const now = document.hidden ? 0 : state.view === 'leaders' ? perMinute('leaders', nLive) : perMinute(watching ? 'game' : 'scores', nLive);
+  const nowWhat = state.view === 'leaders' ? 'Top performers with ' + nLive + ' live game' + (nLive === 1 ? '' : 's')
+    : watching ? 'Watching ' + (state.away?.abbr || '') + '–' + (state.home?.abbr || '') + ' live'
+    : nLive ? 'Scores only (' + nLive + ' live game' + (nLive === 1 ? '' : 's') + ')' : 'No live games: nothing to refresh';
+  const tbl = el('table'), th = el('tr');
+  ['Estimated data', 'per min', 'per hour', 'per game*'].forEach(h => th.append(el('th', null, h)));
+  const thead = el('thead'); thead.append(th);
+  const tb = el('tbody');
+  const row = (label, v, cls, sub) => {
+    const tr = el('tr', cls), td = el('td', null, label);
+    if (sub) td.append(el('span', 'sub', sub));
+    tr.append(td, el('td', null, fmtB(v)), el('td', null, fmtB(v * 60)), el('td', null, fmtB(v * FULL_GAME_MIN)));
+    tb.append(tr);
+  };
+  row('Right now', now, 'now', nowWhat);
+  row('Watching one live game', perMinute('game', Math.max(1, nLive)));
+  row('Top performers, 5 live games', perMinute('leaders', 5));
+  tbl.append(thead, tb);
+  const used = el('p', 'muted', 'Used this visit: ' + fmtB(usage.bytes) + ' in ' + usage.requests + ' request' + (usage.requests === 1 ? '' : 's') +
+    ' · since ' + new Date(usage.total.since).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ': ' + fmtB(usage.total.bytes) + ' ');
+  const clr = el('button', null, 'Reset');
+  clr.onclick = () => { usage.total = { since: Date.now(), bytes: 0 }; store.set('nbapbp.usage', usage.total); renderUsage(); };
+  used.append(clr);
+  box.replaceChildren(tbl, el('p', 'muted', '*A live game lasts about 2¼ hours. Estimates are upper bounds: polling slows during breaks. Compressed sizes, excluding this page itself (~18 KB, downloaded once).'), used);
+}
+
+$('#gear').onclick = () => {
+  const open = $('#settings').hidden;
+  $('#settings').hidden = !open;
+  $('#gear').setAttribute('aria-expanded', String(open));
+  $('#gear').setAttribute('aria-pressed', String(open));
+  if (open) renderSettings();
+  measureHeader();
+};
+
 // ---------------------------------------------------------------- views, routing, misc
 function setStatus(sel, msg, err) { const s = $(sel); s.textContent = msg; s.classList.toggle('err', !!err); }
 
@@ -851,7 +1068,7 @@ function setView(v, load = true) {
   $('#leadersView').hidden = v !== 'leaders';
   $('#navGame').setAttribute('aria-pressed', String(v === 'game'));
   $('#navLeaders').setAttribute('aria-pressed', String(v === 'leaders'));
-  clearTimeout(timers.pbp); clearTimeout(timers.ld);
+  stop('pbp'); stop('ld');
   writeHash(); renderGames();
   if (!load) return;
   if (v === 'game') { if (state.gameId) loadPBP(); }
@@ -903,7 +1120,7 @@ $('#order').onclick = e => { state.newest = !state.newest; e.target.textContent 
 
 // pause all polling while the tab is hidden; refresh immediately on return
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { Object.values(timers).forEach(clearTimeout); return; }
+  if (document.hidden) { Object.keys(timers).forEach(stop); return; }
   loadScoreboard();
   if (state.view === 'game' && state.gameId) loadPBP();
   if (state.view === 'leaders') loadLeaders();

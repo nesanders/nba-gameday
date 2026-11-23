@@ -1,7 +1,8 @@
 // Trim raw API responses down to the fields index.html reads, so fixtures stay small.
 //   node test/make-fixtures.mjs <name>=<raw.json> [...]
 //   e.g. node test/make-fixtures.mjs summary-final=raw/sum_401910029.json scoreboard=raw/sb.json
-// A raw file whose top level has `events` is treated as a scoreboard, otherwise as a summary.
+// The shape is detected: scoreboard (`events`), core-API play list (`items`), core-API status (`type` + `displayClock`),
+// otherwise a game summary.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const OUT = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const pick = (o, keys) => (o == null ? o : Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]])));
 const team = t => pick(t, ['id', 'abbreviation', 'displayName', 'shortDisplayName', 'name', 'color', 'alternateColor']);
-const status = s => s && { ...pick(s, ['displayClock', 'period']), type: pick(s.type, ['state', 'completed', 'detail', 'shortDetail']) };
+const status = s => s && { ...pick(s, ['displayClock', 'period']), type: pick(s.type, ['name', 'state', 'completed', 'detail', 'shortDetail']) };
 const competitor = c => ({ ...pick(c, ['id', 'homeAway', 'score', 'winner']), team: team(c.team),
   ...(c.linescores ? { linescores: c.linescores.map(l => pick(l, ['displayValue', 'value', 'period'])) } : {}) });
 
@@ -36,11 +37,22 @@ function summary(d) {
   };
 }
 
+// core API: team/athletes are $ref URLs; the app parses ids out of them
+const ref = r => r && { $ref: r.$ref };
+function corePlays(d) {
+  return { ...pick(d, ['count', 'pageIndex', 'pageSize', 'pageCount']), items: d.items.map(p => ({
+    ...pick(p, ['id', 'sequenceNumber', 'text', 'awayScore', 'homeScore', 'scoringPlay', 'scoreValue', 'shootingPlay']),
+    type: pick(p.type, ['id', 'text']), period: pick(p.period, ['number']), clock: pick(p.clock, ['displayValue']),
+    ...(p.team ? { team: ref(p.team) } : {}),
+    ...(p.participants ? { participants: p.participants.map(x => ({ athlete: ref(x.athlete), type: x.type })) } : {}),
+  })) };
+}
+
 mkdirSync(OUT, { recursive: true });
 for (const arg of process.argv.slice(2)) {
   const [name, file] = arg.split('=');
   const raw = JSON.parse(readFileSync(file, 'utf8'));
-  const out = raw.events ? scoreboard(raw) : summary(raw);
+  const out = raw.events ? scoreboard(raw) : raw.items ? corePlays(raw) : raw.type && 'displayClock' in raw ? status(raw) : summary(raw);
   const json = JSON.stringify(out);
   writeFileSync(join(OUT, name + '.json'), json + '\n');
   console.log(name.padEnd(22), (readFileSync(file).length / 1024).toFixed(0).padStart(5), 'KB ->', (json.length / 1024).toFixed(0).padStart(4), 'KB');

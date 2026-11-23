@@ -21,10 +21,18 @@ export function defaultRoutes() {
 
 const routeKey = url => {
   const u = new URL(url);
+  const core = u.pathname.match(/\/events\/(\d+)\/competitions\/\d+\/(plays|status)$/);
+  if (core) return 'core:' + core[2] + ':' + core[1];
   if (u.pathname.endsWith('/scoreboard')) return 'scoreboard' + (u.searchParams.get('dates') ? ':' + u.searchParams.get('dates') : '');
   if (u.pathname.endsWith('/summary')) return 'summary:' + u.searchParams.get('event');
   return url;
 };
+
+// serve one page of a full core-API play list, like the real endpoint (1-based `page`, `limit` per page)
+function page(all, q) {
+  const limit = +q.get('limit') || 25, p = +q.get('page') || 1, count = all.items.length;
+  return { count, pageIndex: p, pageSize: limit, pageCount: Math.ceil(count / limit), items: all.items.slice((p - 1) * limit, p * limit) };
+}
 
 export async function boot({ hash = '', routes = defaultRoutes(), storage = {} } = {}) {
   const calls = [], delays = [];
@@ -43,8 +51,11 @@ export async function boot({ hash = '', routes = defaultRoutes(), storage = {} }
         calls.push({ key, opts });
         const name = routes[key];
         if (!name) return { ok: false, status: 404, json: async () => ({}) };
-        const body = typeof name === 'string' ? fixture(name) : name;
-        return { ok: true, status: 200, json: () => (closed ? new Promise(() => {}) : Promise.resolve(structuredClone(body))) };
+        let body = typeof name === 'string' ? fixture(name) : name;
+        if (key.startsWith('core:plays:')) body = page(body, new URL(String(url)).searchParams);
+        const text = JSON.stringify(body);
+        return { ok: true, status: 200, headers: { get: h => (h.toLowerCase() === 'content-length' ? String(Math.round(text.length / 8)) : null) },
+          text: () => (closed ? new Promise(() => {}) : Promise.resolve(text)) };
       };
     },
   });
