@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>NBA Play-by-Play</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
+<style>
+:root{--bg:#fff;--fg:#151515;--muted:#6b6b6b;--line:#e4e4e4;--card:#f4f4f5;--accent:#1d6fe0;--live:#d42020;--hl:#fff3b8;--hh:0px}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0f10;--fg:#ececec;--muted:#9a9a9a;--line:#2a2a2c;--card:#1a1a1c;--accent:#6ea8ff;--live:#ff5c5c;--hl:#4a4010}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+a{color:inherit;text-decoration:none}
+a:hover{text-decoration:underline;color:var(--accent)}
+.wrap{max-width:1500px;margin:0 auto;padding:0 .6rem}
+.muted{color:var(--muted)}
+button,select{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:.2rem .55rem;cursor:pointer}
+button:hover,select:hover{border-color:var(--muted)}
+button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.seg{display:inline-flex}
+.seg button{border-radius:0;margin-left:-1px}
+.seg button:first-child{border-radius:6px 0 0 6px;margin-left:0}
+.seg button:last-child{border-radius:0 6px 6px 0}
+
+/* header */
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:.4rem;padding:.4rem 0;flex-wrap:wrap}
+.bar h1{font-size:1rem;margin:0;white-space:nowrap}
+.bar .sp{flex:1}
+#day{font-variant-numeric:tabular-nums;min-width:6.2em;text-align:center;color:var(--muted)}
+#games{display:flex;gap:.4rem;overflow-x:auto;padding:0 0 .45rem;scrollbar-width:thin}
+.g{flex:0 0 auto;min-width:118px;text-align:left;padding:.3rem .5rem;font-variant-numeric:tabular-nums;font-size:13px}
+.g .t{display:flex;justify-content:space-between;gap:.6rem}
+.g .s{font-size:11px;color:var(--muted)}
+.g.live .s{color:var(--live);font-weight:600}
+.g[aria-current=true]{outline:2px solid var(--accent);outline-offset:-1px}
+@media (max-width:520px){.bar h1{display:none}}
+
+main{padding-top:.6rem;padding-bottom:1.5rem}
+.status{font-size:12px;color:var(--muted);margin:.3rem 0;min-height:1em}
+.status.err{color:var(--live)}
+
+/* score header */
+#score{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem;padding:.55rem;background:var(--card);border-radius:10px;text-align:center}
+#score .tm{display:flex;align-items:baseline;justify-content:center;gap:.5rem;flex-wrap:wrap}
+#score .ab{font-weight:700;border-bottom:3px solid var(--c,transparent)}
+#score .nm{font-size:12px;color:var(--muted)}
+#score .pts{font-size:1.7rem;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+#score .mid{font-size:13px;color:var(--muted)}
+#score .mid.live{color:var(--live);font-weight:600}
+
+/* game view layout: tabs on mobile, side by side on desktop */
+#tabs{margin:.5rem 0 0}
+#panes{display:grid;gap:1rem;margin-top:.4rem}
+@media (max-width:999px){
+  #gameView[data-tab=plays] #boxPane,#gameView[data-tab=box] #playsPane{display:none}
+}
+@media (min-width:1000px){
+  #tabs{display:none}
+  #panes{grid-template-columns:minmax(300px,390px) minmax(0,1fr);align-items:start}
+  #playsPane{position:sticky;top:calc(var(--hh) + .5rem);max-height:calc(100vh - var(--hh) - 1rem);overflow-y:auto;padding-right:.25rem}
+}
+.controls{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin:.1rem 0 .4rem}
+.controls .sp{flex:1}
+
+/* plays */
+.per h2{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:.7rem 0 .15rem;padding-bottom:.2rem;border-bottom:1px solid var(--line)}
+ul{list-style:none;margin:0;padding:0}
+.p{display:grid;grid-template-columns:2.9em 2.7em 1fr auto;gap:.4rem;align-items:baseline;padding:.25rem .2rem;border-bottom:1px solid var(--line);font-size:13px;font-variant-numeric:tabular-nums}
+.p .clk{color:var(--muted);font-size:12px}
+.p .tm{font-size:11px;font-weight:700;border-left:3px solid var(--c,transparent);padding-left:.3rem}
+.p .sc{font-size:12px;color:var(--muted);white-space:nowrap}
+.p.scoring .tx{font-weight:600}
+.p.scoring .sc{color:var(--fg);font-weight:600}
+.p .v{font-size:10px;font-weight:700;color:var(--accent);margin-left:.3rem}
+.new{animation:hl 4s ease-out}
+@keyframes hl{from{background:var(--hl)}to{background:transparent}}
+@media (prefers-reduced-motion:reduce){.new{animation:none}}
+.empty{color:var(--muted);text-align:center;padding:1.5rem 0}
+
+/* box score */
+.boxbar{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin:.1rem 0 .4rem;font-size:13px}
+.tw,.tw0{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:.6rem;scrollbar-width:thin}
+table{border-collapse:separate;border-spacing:0;font-size:12.5px;font-variant-numeric:tabular-nums}
+th,td{padding:.18rem .3rem;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
+.bx{table-layout:fixed}
+.bx td,.bx th{overflow:hidden;text-overflow:ellipsis}
+.bx th:first-child,.bx td:first-child,.ff th:first-child,.ff td:first-child{position:sticky;left:0;z-index:1;text-align:left;background:var(--bg)}
+.bx thead th:first-child,.ff thead th:first-child{background:var(--card)}
+.bx tbody tr:hover td{background:var(--card)}
+.bx .a0{border-left:2px solid var(--line)}
+.bx tr.b0 td{border-top:2px solid var(--line)}
+.bx tfoot td{font-weight:600;background:var(--card);border-bottom:0}
+.bx td.k{font-weight:700}
+.bx .pos{color:var(--muted);font-size:10.5px;margin-left:.25rem}
+.th{display:flex;align-items:baseline;gap:.5rem;margin:.2rem 0 .3rem;font-size:13px}
+.th .ab{font-weight:700;border-bottom:3px solid var(--c,transparent)}
+.th .pts{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums}
+.dnp{font-size:12px;color:var(--muted);margin:-.3rem 0 .8rem}
+
+/* leaders */
+#leaders{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.6rem}
+.card{border:1px solid var(--line);border-radius:10px;padding:.45rem .6rem}
+.card h3{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 .25rem}
+.card li{display:grid;grid-template-columns:1.3em 1fr auto;gap:.4rem;align-items:baseline;padding:.2rem 0;border-bottom:1px solid var(--line);font-size:13px}
+.card li:last-child{border-bottom:0}
+.card .rk{color:var(--muted);font-size:11px}
+.card .val{font-weight:700;font-variant-numeric:tabular-nums}
+.card .sub{display:block;font-size:11px;color:var(--muted)}
+.card .sub button{all:unset;cursor:pointer}
+.card .sub button:hover{color:var(--accent);text-decoration:underline}
+.dot{color:var(--live)}
+
+footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="bar">
+      <h1>🏀 NBA Live</h1>
+      <span class="seg" role="group" aria-label="View">
+        <button id="navGame" aria-pressed="true">Games</button>
+        <button id="navLeaders" aria-pressed="false">Top performers</button>
+      </span>
+      <span class="sp"></span>
+      <button id="prev" aria-label="Previous day">‹</button>
+      <span id="day">Today</span>
+      <button id="next" aria-label="Next day">›</button>
+      <button id="today" hidden>Today</button>
+    </div>
+    <div id="games" role="list" aria-label="Games"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- ===== game view ===== -->
+  <section id="gameView" data-tab="plays">
+    <div id="score" hidden aria-live="polite"></div>
+    <p class="status" id="status"></p>
+    <div id="tabs" class="seg" role="tablist">
+      <button data-tab="plays" aria-pressed="true">Play-by-play</button>
+      <button data-tab="box" aria-pressed="false">Box score</button>
+    </div>
+    <div id="panes">
+      <div id="playsPane">
+        <div class="controls" id="controls" hidden>
+          <span id="filters" class="seg"></span>
+          <select id="period" aria-label="Period"><option value="all">All</option></select>
+          <span class="sp"></span>
+          <button id="order" title="Toggle play order">Newest first</button>
+        </div>
+        <div id="list"></div>
+        <p class="empty" id="empty" hidden>No plays yet.</p>
+      </div>
+      <div id="boxPane">
+        <div class="boxbar"><span class="muted">Top:</span><span id="topSel" class="seg"></span>
+          <span class="muted" style="margin-left:auto">Hover/tap headers for definitions · names → Basketball Reference</span></div>
+        <div id="box"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== top performers view ===== -->
+  <section id="leadersView" hidden>
+    <p class="status" id="ldStatus"></p>
+    <div id="leaders"></div>
+  </section>
+</main>
+
+<footer>Data from ESPN's public (unofficial) API · Advanced stats computed in-browser (Basketball-Reference formulas) · Not affiliated with the NBA, ESPN or Sports Reference</footer>
+
+<script>
+'use strict';
+const API = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+const MS = { livePbp: 10000, liveSb: 30000, preSb: 300000, prePbp: 60000, leaders: 60000, err: 30000 };
+const LEADER_CONCURRENCY = 3;
+
+const $ = s => document.querySelector(s);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* full or blocked */ } },
+};
+
+const state = {
+  view: 'game',      // 'game' | 'leaders'
+  tab: 'plays',      // mobile tab in game view
+  date: null,        // YYYYMMDD; null = ESPN's "today"
+  dayDate: null,     // YYYY-MM-DD reported by ESPN
+  games: [],
+  gameId: null, gameState: null,
+  away: null, home: null,
+  plays: [], filter: 'all', period: 'all', newest: true,
+  box: null,
+  top: store.get('nbapbp.top'),   // team abbreviation the user wants on top
+};
+const timers = { sb: 0, pbp: 0, ld: 0 };
+const leaders = new Map();        // gameId -> { final, rows }
+let sections = new Map(), periodCount = 0, filterKey = '';
+
+// ---------------------------------------------------------------- fetching
+async function getJSON(url) {
+  // 'no-cache' revalidates, so unchanged responses can come back as a tiny 304
+  const r = await fetch(url, { cache: 'no-cache' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+const summaryUrl = id => API + '/summary?event=' + id;
+const bbref = name => 'https://www.basketball-reference.com/search/search.fcgi?search=' + encodeURIComponent(name);
+
+function team(c) {
+  const t = c.team || {};
+  return { id: String(t.id), abbr: t.abbreviation || '?', name: t.shortDisplayName || t.displayName || '',
+    color: t.color ? '#' + t.color : null, score: c.score ?? '', homeAway: c.homeAway };
+}
+
+function parseEvent(e) {
+  const comp = e.competitions?.[0] || {};
+  const cs = (comp.competitors || []).map(team);
+  const st = e.status?.type || comp.status?.type || {};
+  return { id: String(e.id), away: cs.find(c => c.homeAway === 'away') || cs[0], home: cs.find(c => c.homeAway === 'home') || cs[1],
+    state: st.state, detail: st.shortDetail || st.detail || '' };
+}
+
+// ---------------------------------------------------------------- box score parsing + advanced stats
+const COUNT_KEYS = ['min', 'pts', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'orb', 'drb', 'reb', 'ast', 'stl', 'blk', 'tov', 'pf'];
+
+function parsePlayers(tp) {
+  const st = tp.statistics?.[0] || {};
+  const labels = (st.labels || st.names || []).map(x => String(x).toUpperCase());
+  const keys = st.keys || [];
+  const idx = (lab, key) => { let i = labels.indexOf(lab); if (i < 0) i = keys.indexOf(key); return i; };
+  const I = {
+    min: idx('MIN', 'minutes'), pts: idx('PTS', 'points'),
+    fg: idx('FG', 'fieldGoalsMade-fieldGoalsAttempted'), tp: idx('3PT', 'threePointFieldGoalsMade-threePointFieldGoalsAttempted'),
+    ft: idx('FT', 'freeThrowsMade-freeThrowsAttempted'), orb: idx('OREB', 'offensiveRebounds'), drb: idx('DREB', 'defensiveRebounds'),
+    reb: idx('REB', 'rebounds'), ast: idx('AST', 'assists'), stl: idx('STL', 'steals'), blk: idx('BLK', 'blocks'),
+    tov: idx('TO', 'turnovers'), pf: idx('PF', 'fouls'), pm: idx('+/-', 'plusMinus'),
+  };
+  return (st.athletes || []).map(a => {
+    const s = a.stats || [];
+    const raw = i => (i < 0 ? '' : String(s[i] ?? ''));
+    const num = i => { const v = parseFloat(raw(i)); return Number.isFinite(v) ? v : 0; };
+    const pair = i => { const [m, x] = raw(i).split('-').map(Number); return [m || 0, x || 0]; };
+    const minRaw = raw(I.min);
+    const min = minRaw.includes(':') ? (+minRaw.split(':')[0] || 0) + (+minRaw.split(':')[1] || 0) / 60 : num(I.min);
+    const [fgm, fga] = pair(I.fg), [tpm, tpa] = pair(I.tp), [ftm, fta] = pair(I.ft);
+    const orb = num(I.orb), drb = num(I.drb);
+    const ath = a.athlete || {};
+    return {
+      id: String(ath.id ?? ''), name: ath.displayName || ath.shortName || '?', short: ath.shortName || ath.displayName || '?',
+      pos: ath.position?.abbreviation || '', starter: !!a.starter,
+      dnp: !!a.didNotPlay || s.length === 0, reason: a.reason || '',
+      min, pts: num(I.pts), fgm, fga, tpm, tpa, ftm, fta, orb, drb,
+      reb: I.reb >= 0 ? num(I.reb) : orb + drb, ast: num(I.ast), stl: num(I.stl), blk: num(I.blk),
+      tov: num(I.tov), pf: num(I.pf), pm: num(I.pm),
+    };
+  });
+}
+
+const div = (a, b) => (b > 0 ? a / b : null);
+const pct = (a, b) => { const d = div(a, b); return d == null ? null : 100 * d; };
+function sumRows(ps) { const t = { pm: null }; COUNT_KEYS.forEach(k => (t[k] = 0)); ps.forEach(p => COUNT_KEYS.forEach(k => (t[k] += p[k] || 0))); return t; }
+const possOf = (T, O) => T.fga + 0.4 * T.fta - 1.07 * (div(T.orb, T.orb + O.drb) || 0) * (T.fga - T.fgm) + T.tov;
+
+function shooting(p) {
+  return { ts: pct(p.pts, 2 * (p.fga + 0.44 * p.fta)), efg: pct(p.fgm + 0.5 * p.tpm, p.fga),
+    tpar: div(p.tpa, p.fga), ftr: div(p.fta, p.fga), tovp: pct(p.tov, p.fga + 0.44 * p.fta + p.tov), ato: div(p.ast, p.tov) };
+}
+
+// Basketball-Reference definitions: https://www.basketball-reference.com/about/glossary.html
+function playerAdv(p, t, o, five, poss) {
+  const a = shooting(p), m = p.min;
+  a.gmsc = p.pts + 0.4 * p.fgm - 0.7 * p.fga - 0.4 * (p.fta - p.ftm) + 0.7 * p.orb + 0.3 * p.drb + p.stl + 0.7 * p.ast + 0.7 * p.blk - 0.4 * p.pf - p.tov;
+  if (m > 0 && five > 0) {
+    a.orbp = pct(p.orb * five, m * (t.orb + o.drb));
+    a.drbp = pct(p.drb * five, m * (t.drb + o.orb));
+    a.trbp = pct(p.reb * five, m * (t.reb + o.reb));
+    a.astp = pct(p.ast, (m / five) * t.fgm - p.fgm);
+    a.stlp = pct(p.stl * five, m * poss);
+    a.blkp = pct(p.blk * five, m * (o.fga - o.tpa));
+    a.usg = pct((p.fga + 0.44 * p.fta + p.tov) * five, m * (t.fga + 0.44 * t.fta + t.tov));
+  }
+  return a;
+}
+function teamAdv(t, o, poss) {
+  const a = shooting(t);
+  a.orbp = pct(t.orb, t.orb + o.drb); a.drbp = pct(t.drb, t.drb + o.orb); a.trbp = pct(t.reb, t.reb + o.reb);
+  a.astp = pct(t.ast, t.fgm); a.stlp = pct(t.stl, poss); a.blkp = pct(t.blk, o.fga - o.tpa);
+  a.usg = null; a.gmsc = null;
+  return a;
+}
+
+function buildBox(s) {
+  const bp = s.boxscore?.players;
+  if (!bp || bp.length < 2) return null;
+  const cs = (s.header?.competitions?.[0]?.competitors || []).map(team);
+  const teams = bp.slice(0, 2).map(tp => {
+    const meta = cs.find(c => c.id === String(tp.team?.id)) || team({ team: tp.team });
+    return { ...meta, players: parsePlayers(tp) };
+  });
+  if (!teams.some(T => T.players.some(p => !p.dnp))) return null;
+  const [A, B] = teams;
+  A.tot = sumRows(A.players); B.tot = sumRows(B.players);
+  const poss = 0.5 * (possOf(A.tot, B.tot) + possOf(B.tot, A.tot));
+  const mp = Math.max(A.tot.min, B.tot.min);
+  const pace = mp > 0 ? (48 * poss) / (mp / 5) : null;
+  for (const [T, O] of [[A, B], [B, A]]) {
+    const five = (T.tot.min || mp) / 5;
+    T.players.forEach(p => (p.a = playerAdv(p, T.tot, O.tot, five, poss)));
+    T.tot.a = teamAdv(T.tot, O.tot, poss);
+    T.ortg = pct(T.tot.pts, poss); T.drtg = pct(O.tot.pts, poss); T.pace = pace; T.poss = poss;
+  }
+  return { teams };
+}
+
+// ---------------------------------------------------------------- scoreboard
+async function loadScoreboard() {
+  clearTimeout(timers.sb);
+  let delay = 0;
+  try {
+    const d = await getJSON(API + '/scoreboard' + (state.date ? '?dates=' + state.date : ''));
+    state.dayDate = d.day?.date || d.events?.[0]?.date?.slice(0, 10) || null;
+    state.games = (d.events || []).map(parseEvent);
+    renderDay(); renderGames();
+    if (!state.games.some(g => g.id === state.gameId)) {
+      const pick = state.games.find(g => g.state === 'in') || state.games.find(g => g.state === 'pre') || state.games[0];
+      if (pick) selectGame(pick.id); else clearGame('No games on this day.');
+    }
+    if (state.games.some(g => g.state === 'in')) delay = MS.liveSb;
+    else if (state.games.some(g => g.state === 'pre')) delay = MS.preSb;
+  } catch (e) {
+    setStatus('#status', 'Couldn’t load scoreboard (' + e.message + '). Retrying…', true);
+    delay = MS.err;
+  }
+  if (delay && !document.hidden) timers.sb = setTimeout(loadScoreboard, delay);
+}
+
+function renderDay() {
+  let label = 'Today';
+  if (state.date && state.dayDate) label = new Date(state.dayDate + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  $('#day').textContent = label;
+  $('#today').hidden = !state.date;
+}
+
+function renderGames() {
+  const box = $('#games');
+  box.replaceChildren();
+  if (!state.games.length) box.append(el('span', 'muted', 'No games'));
+  for (const g of state.games) {
+    const b = el('button', 'g' + (g.state === 'in' ? ' live' : ''));
+    b.setAttribute('role', 'listitem');
+    b.setAttribute('aria-current', String(state.view === 'game' && g.id === state.gameId));
+    for (const t of [g.away, g.home]) {
+      const row = el('div', 't');
+      row.append(el('span', null, t?.abbr), el('span', null, g.state !== 'pre' ? t?.score : ''));
+      b.append(row);
+    }
+    b.append(el('div', 's', g.detail));
+    b.onclick = () => openGame(g.id);
+    box.append(b);
+  }
+  measureHeader();
+}
+
+// ---------------------------------------------------------------- game view
+function openGame(id) { if (state.view !== 'game') setView('game', false); selectGame(id); }
+
+function selectGame(id) {
+  if (id === state.gameId && (state.plays.length || state.box)) { renderGames(); return; }
+  clearTimeout(timers.pbp);
+  Object.assign(state, { gameId: id, plays: [], box: null, filter: 'all', period: 'all' });
+  periodCount = 0; filterKey = '';
+  $('#period').replaceChildren(new Option('All', 'all'));
+  $('#list').replaceChildren(); sections = new Map();
+  $('#box').replaceChildren(); $('#topSel').replaceChildren();
+  writeHash(); renderGames();
+  const g = state.games.find(x => x.id === id);
+  if (g) { state.away = g.away; state.home = g.home; state.gameState = g.state; renderScore(g.detail); }
+  if (state.view === 'game') { setStatus('#status', 'Loading…'); loadPBP(); }
+}
+
+function clearGame(msg) {
+  clearTimeout(timers.pbp);
+  Object.assign(state, { gameId: null, plays: [], box: null });
+  $('#score').hidden = true; $('#controls').hidden = true;
+  $('#list').replaceChildren(); sections = new Map();
+  $('#box').replaceChildren(); $('#topSel').replaceChildren();
+  $('#empty').hidden = true;
+  setStatus('#status', msg || '');
+  writeHash();
+}
+
+async function loadPBP() {
+  clearTimeout(timers.pbp);
+  const id = state.gameId;
+  if (!id || state.view !== 'game') return;
+  let delay = 0;
+  try {
+    const s = await getJSON(summaryUrl(id));
+    if (id !== state.gameId) return;                // switched games mid-request
+    const comp = s.header?.competitions?.[0] || {};
+    const cs = (comp.competitors || []).map(team);
+    state.away = cs.find(c => c.homeAway === 'away') || state.away;
+    state.home = cs.find(c => c.homeAway === 'home') || state.home;
+    const st = comp.status?.type || {};
+    const detail = st.shortDetail || st.detail || '';
+    state.gameState = st.state || state.gameState;
+    renderScore(detail);
+    renderFilters();
+    updatePlays(s.plays || []);
+    state.box = buildBox(s);
+    renderBox();
+    if (state.box) ingestLeaders(id, state.box, state.gameState === 'post');   // free refresh for the leaders page
+    syncStrip(detail);
+    delay = state.gameState === 'in' ? MS.livePbp : state.gameState === 'pre' ? MS.prePbp : 0;
+    setStatus('#status', state.gameState === 'in'
+      ? 'Live · updated ' + new Date().toLocaleTimeString() + ' · refreshing every ' + MS.livePbp / 1000 + 's'
+      : state.gameState === 'pre' ? 'Game hasn’t started yet.' : 'Final.');
+  } catch (e) {
+    if (id !== state.gameId) return;
+    setStatus('#status', 'Couldn’t load game (' + e.message + '). Retrying…', true);
+    delay = MS.err;
+  }
+  if (delay && !document.hidden && state.view === 'game') timers.pbp = setTimeout(loadPBP, delay);
+}
+
+function syncStrip(detail) {
+  const g = state.games.find(x => x.id === state.gameId);
+  if (!g) return;
+  g.state = state.gameState; g.detail = detail || g.detail;
+  if (state.away && g.away) g.away.score = state.away.score;
+  if (state.home && g.home) g.home.score = state.home.score;
+  renderGames();
+}
+
+function renderScore(detail) {
+  const box = $('#score');
+  const { away, home, gameState } = state;
+  if (!away || !home) { box.hidden = true; return; }
+  const side = (t, rev) => {
+    const d = el('div', 'tm');
+    const ab = el('span', 'ab', t.abbr);
+    if (t.color) ab.style.setProperty('--c', t.color);
+    const parts = [ab, el('span', 'nm', t.name), el('span', 'pts', gameState === 'pre' ? '–' : t.score)];
+    d.append(...(rev ? parts.reverse() : parts));
+    return d;
+  };
+  const mid = el('div', 'mid' + (gameState === 'in' ? ' live' : ''), (gameState === 'in' ? '● ' : '') + detail);
+  box.replaceChildren(side(away, false), mid, side(home, true));
+  box.hidden = false;
+}
+
+// ---------------------------------------------------------------- plays
+const norm = p => ({
+  id: String(p.id ?? p.sequenceNumber), text: p.text || p.type?.text || '',
+  period: p.period?.number || 0, clock: p.clock?.displayValue || '',
+  teamId: p.team?.id != null ? String(p.team.id) : null,
+  scoring: !!p.scoringPlay, value: p.scoreValue || 0, away: p.awayScore, home: p.homeScore,
+});
+
+function updatePlays(raw) {
+  const plays = raw.map(norm), prev = state.plays;
+  // append-only if the tail we already rendered is unchanged; otherwise (corrections, deletions) redraw
+  const k = Math.max(0, prev.length - 3);
+  const appendOnly = prev.length > 0 && plays.length >= prev.length &&
+    prev.slice(k).every((p, i) => plays[k + i].id === p.id && plays[k + i].text === p.text);
+  state.plays = plays;
+  updatePeriods();
+  if (appendOnly) plays.slice(prev.length).forEach(p => insertPlay(p, true));
+  else renderPlays();
+  $('#controls').hidden = plays.length === 0;
+  $('#empty').hidden = $('#list').children.length > 0;
+}
+
+const periodName = n => (n <= 4 ? 'Q' + n : n === 5 ? 'OT' : n - 4 + 'OT');
+const periodTitle = n => (n <= 4 ? ['1st', '2nd', '3rd', '4th'][n - 1] + ' Quarter' : n === 5 ? 'Overtime' : n - 4 + ' Overtime');
+
+function passes(p) {
+  if (state.period !== 'all' && String(p.period) !== state.period) return false;
+  if (state.filter === 'scoring') return p.scoring;
+  if (state.filter !== 'all') return p.teamId === state.filter;
+  return true;
+}
+const teamById = id => [state.away, state.home].find(t => t && t.id === id);
+
+function playEl(p) {
+  const li = el('li', 'p' + (p.scoring ? ' scoring' : ''));
+  const t = teamById(p.teamId);
+  const tm = el('span', 'tm', t ? t.abbr : '');
+  if (t?.color) tm.style.setProperty('--c', t.color);
+  const tx = el('span', 'tx', p.text);
+  if (p.scoring && p.value) tx.append(el('span', 'v', '+' + p.value));
+  li.append(el('span', 'clk', p.clock), tm, tx, el('span', 'sc', p.away != null && p.home != null ? p.away + '–' + p.home : ''));
+  return li;
+}
+
+function insertPlay(p, isNew) {
+  if (!passes(p)) return;
+  let sec = sections.get(p.period);
+  if (!sec) {
+    sec = el('section', 'per');
+    sec.append(el('h2', null, periodTitle(p.period)), el('ul'));
+    sections.set(p.period, sec);
+    state.newest ? $('#list').prepend(sec) : $('#list').append(sec);
+  }
+  const li = playEl(p);
+  if (isNew) li.classList.add('new');
+  const ul = sec.querySelector('ul');
+  state.newest ? ul.prepend(li) : ul.append(li);
+}
+
+function renderPlays() {
+  $('#list').replaceChildren(); sections = new Map();
+  for (const p of state.plays) insertPlay(p, false);
+  $('#empty').hidden = $('#list').children.length > 0;
+}
+
+function updatePeriods() {
+  const max = state.plays.reduce((m, p) => Math.max(m, p.period), 0);
+  if (max === periodCount) return;
+  periodCount = max;
+  const sel = $('#period');
+  sel.replaceChildren(new Option('All', 'all'));
+  for (let n = 1; n <= max; n++) sel.append(new Option(periodName(n), String(n)));
+  sel.value = state.period;
+}
+
+function renderFilters() {
+  const { away, home } = state;
+  const key = (away?.id || '') + '|' + (home?.id || '');
+  if (key === filterKey) return;
+  filterKey = key;
+  const opts = [['all', 'All'], ['scoring', 'Scoring']];
+  if (away) opts.push([away.id, away.abbr]);
+  if (home) opts.push([home.id, home.abbr]);
+  const box = $('#filters');
+  box.replaceChildren();
+  for (const [v, label] of opts) {
+    const b = el('button', null, label);
+    b.dataset.v = v;
+    b.setAttribute('aria-pressed', String(state.filter === v));
+    b.onclick = () => { state.filter = v; box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === v))); renderPlays(); };
+    box.append(b);
+  }
+}
+
+// ---------------------------------------------------------------- box score rendering
+const f0 = v => (v == null || !Number.isFinite(v) ? '' : String(Math.round(v)));
+const f1 = v => (v == null || !Number.isFinite(v) ? '' : v.toFixed(1));
+const f3 = v => (v == null || !Number.isFinite(v) ? '' : v.toFixed(3).replace(/^0/, '').replace(/^-0/, '-'));
+const sg = v => (v == null ? '' : v > 0 ? '+' + v : String(v));
+
+// w = column width in em (fixed so both team tables line up and scroll together)
+const COLS = [
+  { h: 'MIN', t: 'Minutes played', w: 2.5, v: r => f0(r.min) },
+  { h: 'PTS', t: 'Points', w: 2.5, v: r => r.pts, k: 1 },
+  { h: 'REB', t: 'Total rebounds', w: 2.5, v: r => r.reb },
+  { h: 'AST', t: 'Assists', w: 2.5, v: r => r.ast },
+  { h: 'STL', t: 'Steals', w: 2.4, v: r => r.stl },
+  { h: 'BLK', t: 'Blocks', w: 2.4, v: r => r.blk },
+  { h: 'TO', t: 'Turnovers', w: 2.2, v: r => r.tov },
+  { h: 'FG', t: 'Field goals made-attempted', w: 3.6, v: r => r.fgm + '-' + r.fga },
+  { h: '3P', t: '3-pointers made-attempted', w: 3.3, v: r => r.tpm + '-' + r.tpa },
+  { h: 'FT', t: 'Free throws made-attempted', w: 3.3, v: r => r.ftm + '-' + r.fta },
+  { h: 'OREB', t: 'Offensive rebounds', w: 2.9, v: r => r.orb },
+  { h: 'DREB', t: 'Defensive rebounds', w: 2.9, v: r => r.drb },
+  { h: 'PF', t: 'Personal fouls', w: 2.1, v: r => r.pf },
+  { h: '+/-', t: 'Plus/minus while on court', w: 2.7, v: r => sg(r.pm) },
+  { h: 'FG%', t: 'Field goal %', w: 3.1, v: r => f1(pct(r.fgm, r.fga)), a0: 1 },
+  { h: '3P%', t: '3-point %', w: 3.1, v: r => f1(pct(r.tpm, r.tpa)) },
+  { h: 'FT%', t: 'Free throw %', w: 3.1, v: r => f1(pct(r.ftm, r.fta)) },
+  { h: 'TS%', t: 'True shooting %: PTS / (2 × (FGA + 0.44 × FTA))', w: 3.1, v: r => f1(r.a?.ts) },
+  { h: 'eFG%', t: 'Effective FG %: (FGM + 0.5 × 3PM) / FGA', w: 3.3, v: r => f1(r.a?.efg) },
+  { h: 'USG%', t: 'Usage %: share of team plays used while on court', w: 3.3, v: r => f1(r.a?.usg) },
+  { h: 'AST%', t: 'Assist %: share of teammate FGs assisted while on court', w: 3.3, v: r => f1(r.a?.astp) },
+  { h: 'TOV%', t: 'Turnover %: turnovers per 100 plays', w: 3.3, v: r => f1(r.a?.tovp) },
+  { h: 'ORB%', t: 'Offensive rebound %: share of available offensive rebounds grabbed', w: 3.3, v: r => f1(r.a?.orbp) },
+  { h: 'DRB%', t: 'Defensive rebound %', w: 3.3, v: r => f1(r.a?.drbp) },
+  { h: 'TRB%', t: 'Total rebound %', w: 3.3, v: r => f1(r.a?.trbp) },
+  { h: 'STL%', t: 'Steal %: steals per 100 opponent possessions', w: 3.2, v: r => f1(r.a?.stlp) },
+  { h: 'BLK%', t: 'Block %: share of opponent 2PA blocked', w: 3.2, v: r => f1(r.a?.blkp) },
+  { h: '3PAr', t: '3-point attempt rate: 3PA / FGA', w: 3.1, v: r => f3(r.a?.tpar) },
+  { h: 'FTr', t: 'Free throw rate: FTA / FGA', w: 3.1, v: r => f3(r.a?.ftr) },
+  { h: 'AST/TO', t: 'Assist to turnover ratio', w: 3.5, v: r => f1(r.a?.ato) },
+  { h: 'GmSc', t: 'Game Score (Hollinger): rough single-number productivity, ~10 average, 40+ outstanding', w: 3.2, v: r => f1(r.a?.gmsc) },
+];
+const NAME_W = 8.6;
+
+function orderTeams(teams) {
+  const i = teams.findIndex(T => T.abbr === state.top);
+  if (i === 0) return teams;
+  if (i === 1) return [teams[1], teams[0]];
+  return [...teams].sort((a, b) => (a.homeAway === 'away' ? -1 : 0) - (b.homeAway === 'away' ? -1 : 0));
+}
+
+function renderTopSel(order) {
+  const box = $('#topSel');
+  box.replaceChildren();
+  for (const T of order.slice().sort((a, b) => (a.homeAway === 'away' ? -1 : 1))) {
+    const b = el('button', null, T.abbr);
+    b.setAttribute('aria-pressed', String(order[0] === T));
+    b.onclick = () => { state.top = T.abbr; store.set('nbapbp.top', T.abbr); renderBox(); };
+    box.append(b);
+  }
+}
+
+function renderBox() {
+  const pane = $('#box');
+  const b = state.box;
+  if (!b) { pane.replaceChildren(el('p', 'empty', 'Box score appears once the game starts.')); $('#topSel').replaceChildren(); return; }
+  const order = orderTeams(b.teams);
+  renderTopSel(order);
+  const scroll = {};
+  pane.querySelectorAll('[data-t]').forEach(w => (scroll[w.dataset.t] = w.scrollLeft));
+  const frag = document.createDocumentFragment();
+  frag.append(teamSummary(order));
+  for (const T of order) frag.append(...teamTable(T));
+  pane.replaceChildren(frag);
+  pane.querySelectorAll('[data-t]').forEach(w => { if (scroll[w.dataset.t]) w.scrollLeft = scroll[w.dataset.t]; });
+}
+
+function teamSummary(order) {
+  const cols = [
+    ['Pace', 'Possessions per 48 minutes', T => f1(T.pace)],
+    ['Poss', 'Estimated possessions', T => f1(T.poss)],
+    ['ORtg', 'Offensive rating: points per 100 possessions', T => f1(T.ortg)],
+    ['DRtg', 'Defensive rating: points allowed per 100 possessions', T => f1(T.drtg)],
+    ['Net', 'Net rating: ORtg − DRtg', T => f1(T.ortg - T.drtg)],
+    ['eFG%', 'Four factors: effective FG %', T => f1(T.tot.a.efg)],
+    ['TOV%', 'Four factors: turnovers per 100 plays', T => f1(T.tot.a.tovp)],
+    ['ORB%', 'Four factors: offensive rebound %', T => f1(T.tot.a.orbp)],
+    ['FT/FGA', 'Four factors: free throws made per FG attempt', T => f3(div(T.tot.ftm, T.tot.fga))],
+    ['TS%', 'True shooting %', T => f1(T.tot.a.ts)],
+  ];
+  const wrap = el('div', 'tw0');
+  const tbl = el('table', 'ff');
+  const hr = el('tr');
+  hr.append(el('th', null, 'Team'));
+  cols.forEach(([h, t]) => { const th = el('th', null, h); th.title = t; hr.append(th); });
+  const tb = el('tbody');
+  for (const T of order) {
+    const tr = el('tr');
+    tr.append(el('td', null, T.abbr));
+    cols.forEach(([, , f]) => tr.append(el('td', null, f(T))));
+    tb.append(tr);
+  }
+  const th = el('thead'); th.append(hr);
+  tbl.append(th, tb); wrap.append(tbl);
+  return wrap;
+}
+
+function teamTable(T) {
+  const head = el('div', 'th');
+  const ab = el('span', 'ab', T.abbr);
+  if (T.color) ab.style.setProperty('--c', T.color);
+  const score = teamById(T.id)?.score ?? T.tot.pts;
+  head.append(ab, el('span', 'muted', T.name), el('span', 'pts', String(score)));
+
+  const wrap = el('div', 'tw');
+  wrap.dataset.t = T.id;
+  const tbl = el('table', 'bx');
+  const cg = el('colgroup');
+  const nc = el('col'); nc.style.width = NAME_W + 'em'; cg.append(nc);
+  COLS.forEach(c => { const col = el('col'); col.style.width = c.w + 'em'; cg.append(col); });
+  tbl.style.width = (NAME_W + COLS.reduce((s, c) => s + c.w, 0)) + 'em';
+
+  const hr = el('tr');
+  hr.append(el('th', null, 'Player'));
+  COLS.forEach(c => { const th = el('th', c.a0 ? 'a0' : null, c.h); th.title = c.t; hr.append(th); });
+  const thead = el('thead'); thead.append(hr);
+
+  const tbody = el('tbody');
+  const played = T.players.filter(p => !p.dnp);
+  const starters = played.filter(p => p.starter), bench = played.filter(p => !p.starter);
+  [...starters, ...bench].forEach((p, i) => {
+    const tr = el('tr', starters.length && i === starters.length ? 'b0' : null);
+    const td = el('td');
+    const a = el('a', null, p.short);
+    a.href = bbref(p.name); a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.title = p.name + ' on Basketball Reference';
+    td.append(a, el('span', 'pos', p.pos));
+    tr.append(td);
+    COLS.forEach(c => tr.append(el('td', (c.a0 ? 'a0' : '') + (c.k ? ' k' : ''), String(c.v(p)))));
+    tbody.append(tr);
+  });
+  const tfoot = el('tfoot'), fr = el('tr');
+  fr.append(el('td', null, 'Team'));
+  COLS.forEach(c => fr.append(el('td', (c.a0 ? 'a0' : '') + (c.k ? ' k' : ''), c.h === '+/-' ? '' : String(c.v(T.tot)))));
+  tfoot.append(fr);
+  tbl.append(cg, thead, tbody, tfoot);
+  wrap.append(tbl);
+
+  const out = [head, wrap];
+  const dnps = T.players.filter(p => p.dnp);
+  if (dnps.length) {
+    const p = el('p', 'dnp', 'DNP: ');
+    dnps.forEach((d, i) => {
+      const a = el('a', null, d.short);
+      a.href = bbref(d.name); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = d.name;
+      p.append(a, document.createTextNode((d.reason ? ' (' + d.reason.toLowerCase() + ')' : '') + (i < dnps.length - 1 ? ' · ' : '')));
+    });
+    out.push(p);
+  }
+  return out;
+}
+
+// keep both team tables horizontally aligned
+let syncing = false;
+$('#box').addEventListener('scroll', e => {
+  const w = e.target;
+  if (syncing || !w.classList || !w.classList.contains('tw')) return;
+  syncing = true;
+  $('#box').querySelectorAll('.tw').forEach(o => { if (o !== w) o.scrollLeft = w.scrollLeft; });
+  requestAnimationFrame(() => (syncing = false));
+}, true);
+
+// ---------------------------------------------------------------- top performers
+const CATS = [
+  { h: 'Points', v: r => r.pts },
+  { h: 'Rebounds', v: r => r.reb },
+  { h: 'Assists', v: r => r.ast },
+  { h: 'Steals', v: r => r.stl },
+  { h: 'Blocks', v: r => r.blk },
+  { h: '3-pointers made', v: r => r.tpm },
+  { h: 'Game Score', v: r => r.gmsc, f: f1 },
+  { h: 'Plus/minus', v: r => r.pm, f: sg },
+  { h: 'True shooting % (10+ FGA)', v: r => (r.fga >= 10 ? r.ts : null), f: f1 },
+  { h: 'Offensive rebounds', v: r => r.orb },
+  { h: 'Free throws made', v: r => r.ftm },
+  { h: 'Turnovers', v: r => r.tov },
+];
+
+function ingestLeaders(gameId, box, final) {
+  const [A, B] = box.teams;
+  const rows = [];
+  for (const [T, O] of [[A, B], [B, A]]) {
+    for (const p of T.players) {
+      if (p.dnp || !(p.min > 0)) continue;
+      rows.push({ g: gameId, tm: T.abbr, op: O.abbr, name: p.name, short: p.short, min: p.min,
+        pts: p.pts, reb: p.reb, ast: p.ast, stl: p.stl, blk: p.blk, tov: p.tov, orb: p.orb, pm: p.pm,
+        fgm: p.fgm, fga: p.fga, tpm: p.tpm, tpa: p.tpa, ftm: p.ftm, fta: p.fta,
+        gmsc: p.a.gmsc, ts: p.a.ts });
+    }
+  }
+  const entry = { final, rows, at: Date.now() };
+  leaders.set(gameId, entry);
+  if (final) store.set('nbapbp.box.' + gameId, entry);   // finals never change: never refetch them
+}
+
+async function pool(items, n, fn) {
+  const q = [...items];
+  await Promise.all(Array.from({ length: Math.min(n, q.length) }, async () => { while (q.length) await fn(q.shift()); }));
+}
+
+async function loadLeaders() {
+  clearTimeout(timers.ld);
+  if (state.view !== 'leaders') return;
+  const date = state.date;
+  const started = state.games.filter(g => g.state !== 'pre');
+  const todo = started.filter(g => {
+    if (!leaders.has(g.id)) { const c = store.get('nbapbp.box.' + g.id); if (c) leaders.set(g.id, c); }
+    const c = leaders.get(g.id);
+    return !(c && (c.final || Date.now() - (c.at || 0) < MS.leaders / 2));   // skip finals and just-fetched games
+  });
+  if (todo.length) setStatus('#ldStatus', 'Loading ' + todo.length + ' game' + (todo.length > 1 ? 's' : '') + '…');
+  let failed = 0;
+  await pool(todo, LEADER_CONCURRENCY, async g => {
+    try {
+      const s = await getJSON(summaryUrl(g.id));
+      const box = buildBox(s);
+      const st = s.header?.competitions?.[0]?.status?.type?.state;
+      if (box) ingestLeaders(g.id, box, st === 'post');
+    } catch { failed++; }
+  });
+  if (state.view !== 'leaders' || date !== state.date) return;
+  renderLeaders();
+  const live = state.games.some(g => g.state === 'in'), pre = state.games.some(g => g.state === 'pre');
+  const msg = !state.games.length ? 'No games on this day.'
+    : !started.length ? 'No games have started yet.'
+    : started.length + ' of ' + state.games.length + ' games · updated ' + new Date().toLocaleTimeString() + (live ? ' · live games refresh every ' + MS.leaders / 1000 + 's' : '');
+  setStatus('#ldStatus', failed ? msg + ' · ' + failed + ' failed to load' : msg, !!failed);
+  if ((live || pre || failed) && !document.hidden) timers.ld = setTimeout(loadLeaders, live || failed ? MS.leaders : MS.preSb);
+}
+
+function renderLeaders() {
+  const ids = new Set(state.games.map(g => g.id));
+  const liveIds = new Set(state.games.filter(g => g.state === 'in').map(g => g.id));
+  const rows = [...leaders].filter(([id]) => ids.has(id)).flatMap(([, e]) => e.rows);
+  const box = $('#leaders');
+  box.replaceChildren();
+  if (!rows.length) return;
+  for (const c of CATS) {
+    const vals = rows.map(r => ({ r, v: c.v(r) })).filter(x => x.v != null && Number.isFinite(x.v)).sort((a, b) => b.v - a.v);
+    if (!vals.length) continue;
+    const cut = vals[Math.min(4, vals.length - 1)].v;
+    const list = vals.filter((x, i) => i < 5 || x.v === cut).slice(0, 8);
+    const card = el('div', 'card');
+    card.append(el('h3', null, c.h));
+    const ol = el('ol');
+    ol.style.cssText = 'list-style:none;margin:0;padding:0';
+    let rank = 0, last = null;
+    list.forEach((x, i) => {
+      if (x.v !== last) { rank = i + 1; last = x.v; }
+      const r = x.r, li = el('li');
+      const who = el('span');
+      const a = el('a', null, r.name);
+      a.href = bbref(r.name); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = r.name + ' on Basketball Reference';
+      const sub = el('span', 'sub');
+      const gb = el('button', null, r.tm + ' vs ' + r.op);
+      gb.title = 'Open game'; gb.onclick = () => openGame(r.g);
+      sub.append(gb, document.createTextNode(' · ' + r.pts + 'p ' + r.reb + 'r ' + r.ast + 'a · ' + r.fgm + '-' + r.fga + ' FG'));
+      if (liveIds.has(r.g)) sub.append(el('span', 'dot', ' ● live'));
+      who.append(a, sub);
+      li.append(el('span', 'rk', String(rank)), who, el('span', 'val', c.f ? c.f(x.v) : String(x.v)));
+      ol.append(li);
+    });
+    card.append(ol);
+    box.append(card);
+  }
+}
+
+// ---------------------------------------------------------------- views, routing, misc
+function setStatus(sel, msg, err) { const s = $(sel); s.textContent = msg; s.classList.toggle('err', !!err); }
+
+function setView(v, load = true) {
+  state.view = v;
+  $('#gameView').hidden = v !== 'game';
+  $('#leadersView').hidden = v !== 'leaders';
+  $('#navGame').setAttribute('aria-pressed', String(v === 'game'));
+  $('#navLeaders').setAttribute('aria-pressed', String(v === 'leaders'));
+  clearTimeout(timers.pbp); clearTimeout(timers.ld);
+  writeHash(); renderGames();
+  if (!load) return;
+  if (v === 'game') { if (state.gameId) loadPBP(); }
+  else loadLeaders();
+}
+
+function setTab(t) {
+  state.tab = t;
+  $('#gameView').dataset.tab = t;
+  $('#tabs').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tab === t)));
+  writeHash();
+}
+
+function writeHash() {
+  const q = new URLSearchParams();
+  if (state.view === 'leaders') q.set('v', 'leaders');
+  if (state.date) q.set('d', state.date);
+  if (state.view === 'game' && state.gameId) q.set('g', state.gameId);
+  if (state.view === 'game' && state.tab === 'box') q.set('t', 'box');
+  const h = q.toString();
+  history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
+}
+
+function measureHeader() { document.documentElement.style.setProperty('--hh', $('header').offsetHeight + 'px'); }
+window.addEventListener('resize', measureHeader);
+
+const ymd = d => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+async function changeDate(date) {
+  state.date = date;
+  clearGame('Loading…');
+  $('#leaders').replaceChildren();
+  await loadScoreboard();
+  if (state.view === 'leaders') loadLeaders();
+}
+function shiftDay(n) {
+  const base = state.dayDate ? new Date(state.dayDate + 'T12:00:00') : new Date();
+  base.setDate(base.getDate() + n);
+  changeDate(ymd(base));
+}
+
+$('#prev').onclick = () => shiftDay(-1);
+$('#next').onclick = () => shiftDay(1);
+$('#today').onclick = () => changeDate(null);
+$('#navGame').onclick = () => setView('game');
+$('#navLeaders').onclick = () => setView('leaders');
+$('#tabs').querySelectorAll('button').forEach(b => (b.onclick = () => setTab(b.dataset.tab)));
+$('#period').onchange = e => { state.period = e.target.value; renderPlays(); };
+$('#order').onclick = e => { state.newest = !state.newest; e.target.textContent = state.newest ? 'Newest first' : 'Oldest first'; renderPlays(); };
+
+// pause all polling while the tab is hidden; refresh immediately on return
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { Object.values(timers).forEach(clearTimeout); return; }
+  loadScoreboard();
+  if (state.view === 'game' && state.gameId) loadPBP();
+  if (state.view === 'leaders') loadLeaders();
+});
+
+// restore from hash, e.g. #d=20261122&g=401704123&t=box  or  #v=leaders&d=20261122
+(async () => {
+  const q = new URLSearchParams(location.hash.slice(1));
+  if (/^\d{8}$/.test(q.get('d') || '')) state.date = q.get('d');
+  if (q.get('t') === 'box') setTab('box');
+  const v = q.get('v') === 'leaders' ? 'leaders' : 'game';
+  setView(v, false);
+  if (v === 'game' && q.get('g')) { state.gameId = q.get('g'); setStatus('#status', 'Loading…'); loadPBP(); }
+  measureHeader();
+  await loadScoreboard();
+  if (v === 'leaders') loadLeaders();
+})();
+</script>
+</body>
+</html>
