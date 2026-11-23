@@ -27,7 +27,7 @@ Run tests: `npm test`.
 ## Live loop
 - First load and box refreshes use the full game summary (~35 KB gzip). Between them, the lightweight path fetches the core API's `…/competitions/<id>/status` (~0.3 KB) and `…/plays?limit=25&page=⌊have/25⌋+1` (~2 KB), merging plays by id (ids are identical in both APIs; the core API is often a play or two ahead). Score comes from the newest play.
 - The box refreshes only when `settings.box` has elapsed **and** new plays arrived. More than one page behind, or the game just went final → one full refresh. Two lightweight failures in a row → full summaries for that game.
-- `nextDelay()`: halftime 60 s, end of quarter 30 s (`STATUS_END_PERIOD`, verified), timeout with no change since → 30 s, any other unchanged poll → 20 s then 30 s; never faster than the user's interval. `STATUS_HALFTIME` is assumed; the detail text `/^half/i` is a fallback.
+- `nextDelay()`: halftime 60 s, end of quarter 30 s (`STATUS_END_PERIOD`, verified), timeout with no change since → 30 s, any other unchanged poll → 20 s then 30 s; never faster than the user's interval. `STATUS_HALFTIME` (verified 2026-11-23); the detail text `/^half/i` is a fallback.
 - Corrections happen: ESPN rewrites earlier plays (e.g. a miss becomes a block). `updatePlays` redraws and highlights new and changed plays.
 
 ## Data usage tracking

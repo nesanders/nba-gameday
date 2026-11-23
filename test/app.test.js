@@ -297,6 +297,19 @@ test('lite updates off: every tick is a full summary', async () => {
 });
 
 // ---------------------------------------------------------------- breaks
+test('halftime (real captures, both paths): checks every 60s and says so', async () => {
+  // full path: summary captured at halftime
+  let app = await boot({ hash: '#g=' + G, routes: { ...liteRoutes(), ['summary:' + G]: 'summary-' + G + '-half' } });
+  await app.settle(() => app.delays.some(d => d.fn === 'loadPBP'));
+  assert.equal(app.delays.find(d => d.fn === 'loadPBP').ms, 60000);
+  assert.match(app.$('#status').textContent, /Halftime, checking every 60s/);
+  // lightweight path: core status captured at halftime
+  app = await liteApp({ routes: { ...liteRoutes(), ['core:status:' + G]: 'core-status-' + G + '-half' } });
+  await tick(app, () => app.delays.length === 1);
+  assert.equal(app.delays[0].ms, 60000);
+  assert.match(app.$('#score .mid').textContent, /Halftime/);
+});
+
 test('end of quarter (real capture): checks every 30s and says so', async () => {
   const routes = { ...defaultRoutes(), 'summary:401910033': 'summary-401910033-endq' };
   const app = await boot({ hash: '#g=401910033', routes });
