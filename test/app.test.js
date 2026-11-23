@@ -524,7 +524,7 @@ test('home is the landing page: game cards with line scores, strip hidden', asyn
   assert.deepEqual(Array.from(fin.querySelectorAll('thead th'), t => t.textContent), ['', '1', '2', '3', '4', 'T']);
   const atl = Array.from(fin.querySelectorAll('tbody tr')[1].children, td => td.textContent);
   assert.deepEqual(atl.slice(1), ['29', '22', '23', '33', '107']);
-  assert.match(atl[0], /^ATL\d+-\d+$/);                                 // abbreviation + record
+  assert.match(atl[0], /^@ATL\d+-\d+$/);                                // home marker + abbreviation + record
   const pre = app.$$('#homeGames .gc')[5];
   assert.equal(pre.querySelector('thead'), null);
   assert.match(pre.querySelector('.st').textContent, /PM/);
@@ -645,4 +645,25 @@ test('scoreboard failure on home shows the error, not "no games"', async () => {
   const app = await boot({ hash: '', routes: {} });
   await app.settle(() => /Couldn’t load scoreboard/.test(app.$('#homeStatus').textContent));
   assert.ok(app.$('#homeStatus').classList.contains('err'));
+});
+
+test('home team is marked with "@" on the score header, box headings, strip, cards and leaderboards', async () => {
+  const app = await boot();                                          // OKC @ MIA, MIA at home
+  await app.settle(() => app.$$('table.bx').length === 2);
+  const marks = sel => app.$$(sel + ' .hm').filter(m => m.textContent === '@');
+  assert.equal(marks('#score').length, 1);
+  assert.equal(marks('#score')[0].nextSibling.textContent, 'MIA');
+  assert.equal(marks('#score')[0].title, 'Home team');
+  assert.deepEqual(app.$$('.th').map(h => h.textContent.startsWith('@')), app.$$('.th').map(h => h.querySelector('.ab').textContent === 'MIA'));
+  const tile = app.$('#games .g[aria-current=true]');
+  assert.equal(marks('#games .g[aria-current=true]').length, 1);
+  assert.equal(tile.querySelectorAll('.hm').length, 2);              // away row has an empty spacer for alignment
+  assert.match(tile.textContent, /^OKC58@MIA70/);
+  app.$('#logo').click();
+  await app.settle(() => app.$$('#homeGames .gc').length === 7 && app.$$('#homeLeaders li.go').length > 0);
+  for (const card of app.$$('#homeGames .gc')) assert.equal(card.querySelectorAll('.ab .hm').length, 2);
+  assert.equal(app.$$('#homeGames .gc .ab .hm').filter(m => m.textContent === '@').length, 7);
+  // leaderboards: away players read "X @ Y", home players "Y vs X"
+  const subs = app.$$('#homeLeaders .mu').map(m => m.textContent);
+  assert.ok(subs.includes('ATL vs DET') && subs.includes('DET @ ATL'), subs.join(', '));
 });
