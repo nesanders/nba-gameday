@@ -31,7 +31,11 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .bar h1 a:hover{text-decoration:none}
 .bar .sp{flex:1}
 .bar .sm{display:none}
-#day{font-variant-numeric:tabular-nums;min-width:6.2em;text-align:center;color:var(--muted)}
+#day{font-variant-numeric:tabular-nums;min-width:6.2em;text-align:center;color:var(--muted);background:none;border-color:transparent}
+#day:hover,#day:focus-visible{border-color:var(--line);color:var(--fg)}
+/* native date picker, opened from the #day button; invisible but rendered so the picker anchors under the label */
+.daywrap{position:relative;display:inline-flex}
+#dayPick{position:absolute;inset:0;width:100%;height:100%;opacity:0;pointer-events:none;border:0;padding:0}
 #games{display:flex;gap:.4rem;overflow-x:auto;padding:0 0 .45rem;scrollbar-width:thin}
 .g{flex:0 0 auto;min-width:118px;text-align:left;padding:.3rem .5rem;font-variant-numeric:tabular-nums;font-size:13px}
 .g .t{display:flex;justify-content:space-between;gap:.6rem}
@@ -213,7 +217,7 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
       </span>
       <span class="sp"></span>
       <button id="prev" aria-label="Previous day">‹</button>
-      <span id="day">Today</span>
+      <span class="daywrap"><button id="day" aria-label="Choose a date" title="Choose a date">Today</button><input type="date" id="dayPick" tabindex="-1" aria-hidden="true"></span>
       <button id="next" aria-label="Next day">›</button>
       <button id="today" hidden>Today</button>
       <button id="gear" aria-label="Settings" aria-expanded="false" aria-controls="settings" title="Refresh speed &amp; data usage">⚙</button>
@@ -518,6 +522,7 @@ async function loadScoreboard() {
     // next UTC day), so the requested date is the only reliable label. `day` is present for "today".
     state.dayDate = state.date ? state.date.replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3')
       : d.day?.date || d.events?.[0]?.date?.slice(0, 10) || null;
+    if (!state.date && state.dayDate) state.todayDate = state.dayDate;
     state.sbError = false;
     state.games = (d.events || []).map(parseEvent);
     // the watched game is refreshed more often than the scoreboard: keep our fresher score/clock on its tile
@@ -542,6 +547,7 @@ function renderDay() {
   let label = 'Today';
   if (state.date && state.dayDate) label = new Date(state.dayDate + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   $('#day').textContent = label;
+  $('#dayPick').value = state.dayDate || '';
   $('#today').hidden = !state.date;
 }
 
@@ -1712,6 +1718,17 @@ const go = v => { if (state.view !== v) { pushNav(); setView(v); } };
 $('#prev').onclick = () => shiftDay(-1);
 $('#next').onclick = () => shiftDay(1);
 $('#today').onclick = () => changeDate(null);
+// calendar: the browser's own date picker (showPicker where supported; focusing the input elsewhere)
+$('#day').onclick = () => {
+  const pick = $('#dayPick');
+  pick.value = state.dayDate || ymd(new Date()).replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3');
+  try { pick.showPicker(); } catch { pick.focus(); }
+};
+$('#dayPick').onchange = e => {
+  const v = e.target.value;                            // YYYY-MM-DD, or '' when cleared
+  if (!v || v === state.dayDate) return;
+  changeDate(v === state.todayDate ? null : v.replaceAll('-', ''));
+};
 $('#logo').onclick = e => { e.preventDefault(); go('home'); };
 $('#allLeaders').onclick = () => go('leaders');
 // "Games" always shows the grid of all games, even from inside a game

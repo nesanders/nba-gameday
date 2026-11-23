@@ -768,3 +768,24 @@ test('game cards mark the winner of finished games (ESPN flag, or the higher sco
   for (const e of sb.events) for (const c of e.competitions[0].competitors) delete c.winner;
   await check({ ...defaultRoutes(), scoreboard: sb });
 });
+
+test('date picker: the date label opens a calendar; picking a day loads it; picking today returns to live', async () => {
+  const routes = defaultRoutes();
+  routes['scoreboard:20261105'] = datedBoard('20261105');
+  const app = await boot({ hash: '', routes });
+  await app.settle(() => app.$$('#homeGames .gc').length === 7);
+  const pick = app.$('#dayPick'), pickDay = v => { pick.value = v; pick.dispatchEvent(new app.window.Event('change')); };
+  assert.equal(pick.type, 'date');
+  assert.equal(pick.value, '2026-11-22');                              // ESPN's "today" from the scoreboard
+  app.$('#day').click();                                               // jsdom has no showPicker: falls back to focus
+  assert.equal(app.document.activeElement, pick);
+  pickDay('2026-11-05');
+  await app.settle(() => app.calls.some(c => c.key === 'scoreboard:20261105') && /5/.test(app.$('#day').textContent));
+  assert.match(app.window.location.hash, /d=20261105/);
+  assert.equal(app.$('#today').hidden, false);
+  assert.equal(pick.value, '2026-11-05');
+  pickDay('2026-11-22');                                               // today again: no date in the URL
+  await app.settle(() => app.$('#day').textContent === 'Today' && app.window.location.hash === '');
+  app.window.history.back();                                           // each pick is a Back step
+  await app.settle(() => /d=20261105/.test(app.window.location.hash) && app.$('#day').textContent !== 'Today');
+});
