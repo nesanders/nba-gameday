@@ -342,7 +342,7 @@ test('estimates: lite vs full per-minute math', async () => {
   assert.equal(Math.round(app.eval("perMinute('game', 1)")), 6 * 2600 + 34000 + 13000);
   app.eval('settings.lite = false');
   assert.equal(Math.round(app.eval("perMinute('game', 1)")), 6 * 34000 + 13000);
-  assert.equal(Math.round(app.eval("perMinute('leaders', 5)")), 5 * 34000 + 13000);
+  assert.equal(Math.round(app.eval("perMinute('leaders', 5)")), 5 * 34000 / 5 + 13000);   // 5 games every 5 min
   assert.equal(app.eval("perMinute('scores', 0)"), 0);
 });
 
@@ -551,6 +551,50 @@ test('logo returns home; Games from home opens the live game; cards open their g
   const card = app.$$('#homeGames .gc').find(c => /DEN/.test(c.textContent));
   card.dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'Enter' }));
   await app.settle(() => /g=401910032/.test(app.window.location.hash) && /^Live/.test(app.$('#status').textContent));
+});
+
+test('leaderboard rows open their game (click or Enter); the player name still links out', async () => {
+  const app = await boot({ hash: '#v=leaders' });
+  await app.settle(() => app.$$('#leaders .card').length === 12);
+  const row = app.$('#leaders .card li.go');                         // top scorer: Alexander-Walker, ATL vs DET (final)
+  row.querySelector('a').click();                                     // name -> Basketball Reference, not the game
+  assert.equal(app.$('#leadersView').hidden, false);
+  assert.match(row.querySelector('a').href, /basketball-reference\.com/);
+  row.querySelector('.sub').click();
+  await app.settle(() => app.$('#status').textContent === 'Final.');
+  assert.match(app.window.location.hash, /g=401910029/);
+  app.window.history.back();                                          // Back returns to the leaderboard
+  await app.settle(() => !app.$('#leadersView').hidden);
+  const live = app.$$('#leaders .card li.go').find(li => /live/.test(li.textContent));
+  live.dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'Enter' }));
+  await app.settle(() => !app.$('#gameView').hidden && /^Live/.test(app.$('#status').textContent));
+  // home's summary cards work the same way
+  app.$('#logo').click();
+  await app.settle(() => app.$$('#homeLeaders li.go').length > 0);
+  app.$('#homeLeaders li.go .val').click();
+  await app.settle(() => !app.$('#gameView').hidden);
+});
+
+test('top performers and home refresh every 5 minutes by default', async () => {
+  const app = await boot({ hash: '#v=leaders' });
+  await app.settle(() => app.delays.some(d => d.fn === 'loadLeaders'));
+  assert.equal(app.delays.find(d => d.fn === 'loadLeaders').ms, 300000);
+  assert.match(app.$('#ldStatus').textContent, /live games refresh every 5 min/);
+});
+
+test('settings migrate: old full saves pick up the new default; choices persist as differences', async () => {
+  const old = { live: 10, box: 60, others: 60, leaders: 60, breaks: true, lite: true };   // pre-v2 save of the old defaults
+  const ready = a => a.settle(() => /^Live/.test(a.$('#status').textContent)).then(() => a);
+  let app = await ready(await boot({ storage: { 'nbapbp.settings': old } }));
+  assert.equal(app.eval('settings.leaders'), 300);
+  app = await ready(await boot({ storage: { 'nbapbp.settings': { v: 2, leaders: 60 } } }));        // an explicit choice of 1 min
+  assert.equal(app.eval('settings.leaders'), 60);
+  app = await ready(await boot({ storage: { 'nbapbp.settings': { ...old, leaders: 120, live: 20 } } }));
+  assert.equal(app.eval('settings.leaders'), 120);
+  app.$('#gear').click();
+  const sel = app.$$('#setControls select')[0];
+  sel.value = '30'; sel.dispatchEvent(new app.window.Event('change'));
+  assert.deepEqual({ ...JSON.parse(app.window.localStorage.getItem('nbapbp.settings')) }, { v: 2, live: 30, leaders: 120 });
 });
 
 test('scoreboard failure on home shows the error, not "no games"', async () => {

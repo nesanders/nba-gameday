@@ -160,8 +160,11 @@ th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
 .card .rk{color:var(--muted);font-size:11px}
 .card .val{font-weight:700;font-variant-numeric:tabular-nums}
 .card .sub{display:block;font-size:11px;color:var(--muted)}
-.card .sub button{all:unset;cursor:pointer}
-.card .sub button:hover{color:var(--accent);text-decoration:underline}
+.card li.go{grid-template-columns:1.3em 1fr auto .7em;cursor:pointer;border-radius:4px}
+.card li.go:hover,.card li.go:focus-visible{background:var(--card);outline:none}
+.card li.go:hover .mu,.card li.go:focus-visible .mu{color:var(--accent);text-decoration:underline}
+.card .chev{color:var(--muted);font-size:15px;line-height:1}
+.card li.go:hover .chev{color:var(--accent)}
 .dot{color:var(--live)}
 
 footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5rem}
@@ -259,8 +262,15 @@ const store = {
 };
 
 // user-adjustable refresh intervals, in seconds (settings panel)
-const DEFAULTS = { live: 10, box: 60, others: 60, leaders: 60, breaks: true, lite: true };
-const settings = { ...DEFAULTS, ...(store.get('nbapbp.settings') || {}) };
+const DEFAULTS = { live: 10, box: 60, others: 60, leaders: 300, breaks: true, lite: true };
+// Saved as differences from DEFAULTS (v:2), so changing a default reaches everyone who didn't pick that value.
+// Older saves stored every value; their leaders: 60 was the old default, not a choice.
+const savedSettings = store.get('nbapbp.settings') || {};
+if (!savedSettings.v && savedSettings.leaders === 60) delete savedSettings.leaders;
+delete savedSettings.v;
+const settings = { ...DEFAULTS, ...savedSettings };
+const saveSettings = () => store.set('nbapbp.settings',
+  Object.fromEntries([['v', 2], ...Object.entries(settings).filter(([k, v]) => v !== DEFAULTS[k])]));
 const sec = k => settings[k] * 1000;
 
 const state = {
@@ -1027,7 +1037,7 @@ async function loadLeaders() {
   const anyLive = state.games.some(g => g.state === 'in'), pre = state.games.some(g => g.state === 'pre');
   const msg = !state.games.length ? 'No games on this day.'
     : !started.length ? 'No games have started yet.'
-    : started.length + ' of ' + state.games.length + ' games · updated ' + new Date().toLocaleTimeString() + (anyLive ? ' · live games refresh every ' + settings.leaders + 's' : '');
+    : started.length + ' of ' + state.games.length + ' games · updated ' + new Date().toLocaleTimeString() + (anyLive ? ' · live games refresh every ' + fmtSec(settings.leaders) : '');
   setStatus(viewStatus(), failed ? msg + ' · ' + failed + ' failed to load' : msg, !!failed);
   if ((anyLive || pre || failed) && !document.hidden) sched('ld', loadLeaders, anyLive || failed ? sec('leaders') : MS.preSb);
 }
@@ -1050,17 +1060,20 @@ function leaderCard(c, rows, n, liveIds) {
   let rank = 0, last = null;
   list.forEach((x, i) => {
     if (x.v !== last) { rank = i + 1; last = x.v; }
-    const r = x.r, li = el('li');
+    const r = x.r, li = el('li', 'go');
+    // the whole row opens the game; the player's name keeps its Basketball Reference link
+    li.tabIndex = 0;
+    li.title = 'Open ' + r.tm + ' vs ' + r.op;
+    li.onclick = e => { if (!e.target.closest('a')) openGame(r.g); };
+    li.onkeydown = e => { if (e.key === 'Enter' && e.target === li) openGame(r.g); };
     const who = el('span');
     const a = el('a', null, r.name);
     a.href = bbref(r.name); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = r.name + ' on Basketball Reference';
     const sub = el('span', 'sub');
-    const gb = el('button', null, r.tm + ' vs ' + r.op);
-    gb.title = 'Open game'; gb.onclick = () => openGame(r.g);
-    sub.append(gb, document.createTextNode(' · ' + r.pts + 'p ' + r.reb + 'r ' + r.ast + 'a · ' + r.fgm + '-' + r.fga + ' FG'));
+    sub.append(el('span', 'mu', r.tm + ' vs ' + r.op), document.createTextNode(' · ' + r.pts + 'p ' + r.reb + 'r ' + r.ast + 'a · ' + r.fgm + '-' + r.fga + ' FG'));
     if (liveIds.has(r.g)) sub.append(el('span', 'dot', ' ● live'));
     who.append(a, sub);
-    li.append(el('span', 'rk', String(rank)), who, el('span', 'val', c.f ? c.f(x.v) : String(x.v)));
+    li.append(el('span', 'rk', String(rank)), who, el('span', 'val', c.f ? c.f(x.v) : String(x.v)), el('span', 'chev', '›'));
     ol.append(li);
   });
   card.append(ol);
@@ -1165,7 +1178,7 @@ function renderSettings() {
     box.append(lab);
   }
   const reset = el('button', null, 'Defaults');
-  reset.onclick = () => { Object.assign(settings, DEFAULTS); store.set('nbapbp.settings', settings); renderSettings(); retime(); };
+  reset.onclick = () => { Object.assign(settings, DEFAULTS); saveSettings(); renderSettings(); retime(); };
   box.append(reset);
   box.append(el('p', 'hint', 'Lightweight updates fetch only new plays (~2 KB) between box-score refreshes, instead of the whole game (~35 KB) every time. ' +
     'Breaks: checks every 30s between quarters and in timeouts, every 60s at halftime. Nothing is downloaded while this tab is hidden, and finished games are never re-downloaded.'));
@@ -1174,7 +1187,7 @@ function renderSettings() {
 
 function saveSetting(k, v) {
   settings[k] = v;
-  store.set('nbapbp.settings', settings);
+  saveSettings();
   if (k === 'lite') renderSettings(); else renderUsage();
   retime();
 }

@@ -11,7 +11,7 @@ Static NBA live dashboard served by GitHub Pages at https://nsanders.me/nba-game
 Run tests: `npm test`.
 
 ## Hard constraints
-- Low data. Defaults (user-adjustable in the ⚙ panel, saved in `nbapbp.settings`): watched live game every 10 s; its box score at most every 60 s; scoreboard (all other games, one request) every 60 s while any game is live; leaders every 60 s while that view is open. All polling pauses while the tab is hidden. Final games are cached in localStorage (`nbapbp.box.<id>`) and never refetched.
+- Low data. Defaults (user-adjustable in the ⚙ panel, saved in `nbapbp.settings`): watched live game every 10 s; its box score at most every 60 s; scoreboard (all other games, one request) every 60 s while any game is live; home and Top performers (per-game box data for every live game) every 5 min while open. Settings are stored as differences from `DEFAULTS` (`v: 2`), so changing a default reaches users who didn't pick that value. All polling pauses while the tab is hidden. Final games are cached in localStorage (`nbapbp.box.<id>`) and never refetched.
 - Client-side only, static files only.
 - Build DOM with `textContent`/`createElement`; never `innerHTML` with API data (a test greps for it).
 - Dense and readable at 360 px and desktop (≥1000 px shows plays and box side by side); light/dark via `prefers-color-scheme`.
