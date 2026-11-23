@@ -821,6 +821,10 @@ function updatePeriods() {
 function renderFilters() {
   const { away, home } = state;
   const key = (away?.id || '') + '|' + (home?.id || '');
+  if (state.filterAbbr) {
+    const t = [away, home].find(x => x?.abbr === state.filterAbbr);
+    if (t) { state.filter = t.id; state.filterAbbr = null; }
+  }
   if (key === filterKey) return;
   filterKey = key;
   const opts = [['all', 'All'], ['scoring', 'Scoring']];
@@ -832,7 +836,7 @@ function renderFilters() {
     const b = el('button', null, label);
     b.dataset.v = v;
     b.setAttribute('aria-pressed', String(state.filter === v));
-    b.onclick = () => { state.filter = v; box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === v))); renderPlays(); };
+    b.onclick = () => { state.filter = v; box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === v))); renderPlays(); writeHash(); };
     box.append(b);
   }
 }
@@ -966,9 +970,11 @@ function sortPlayers(ps) {
     return gmsc(b) - gmsc(a);                       // ties: higher Game Score first
   });
 }
+const boxDefaultDir = k => (k === 'Player' ? 1 : -1);
 function setSort(key) {
-  state.sort = state.sort.key === key ? { key, dir: -state.sort.dir } : { key, dir: key === 'Player' ? 1 : -1 };
+  state.sort = state.sort.key === key ? { key, dir: -state.sort.dir } : { key, dir: boxDefaultDir(key) };
   renderBox();
+  writeHash();
   const th = [...$('#box').querySelectorAll('.bx thead th')].find(t => t.dataset.k === key);   // keep keyboard focus
   if (th) th.focus();
 }
@@ -1366,6 +1372,7 @@ function seasonTable(tab, vals) {
         const best = def.metrics[k].best;
         // best games are pre-selected per column, so only the "best" direction is exact; per-game sorts both ways
         seasonState.sort[tab] = sort.k === k && def.both ? { k, dir: -sort.dir } : { k, dir: best };
+        writeHash();
         loadSeason();
       };
       th.onclick = go;
@@ -1426,10 +1433,10 @@ $('#seasonTabs').querySelectorAll('button').forEach(b => (b.onclick = () => {
   if (seasonState.tab === b.dataset.s) return;
   pushNav(); seasonState.tab = b.dataset.s; syncSeasonControls(); writeHash(); loadSeason();
 }));
-$('#seasonTeam').onchange = e => { seasonState.team = e.target.value; loadSeason(); };
+$('#seasonTeam').onchange = e => { seasonState.team = e.target.value; writeHash(); loadSeason(); };
 let findTimer = 0;
-$('#seasonFind').oninput = e => { clearTimeout(findTimer); findTimer = setTimeout(() => { seasonState.find = e.target.value; loadSeason(); }, 250); };
-$('#seasonAll').onchange = e => { seasonState.all = e.target.checked; loadSeason(); };
+$('#seasonFind').oninput = e => { clearTimeout(findTimer); findTimer = setTimeout(() => { seasonState.find = e.target.value; writeHash(); loadSeason(); }, 250); };
+$('#seasonAll').onchange = e => { seasonState.all = e.target.checked; writeHash(); loadSeason(); };
 
 // ---------------------------------------------------------------- settings + data usage
 const CHOICES = {
@@ -1574,7 +1581,7 @@ function setTab(t) {
   writeHash();
 }
 
-// URL: (nothing) home · #v=leaders · #v=season[&s=pg|tg] · #g=<id> game (#v=game before one is chosen) · #d=YYYYMMDD date · #t=box mobile tab
+// URL: (nothing) home · #v=leaders · #v=season[&s=pg|tg] (+ view state below) · #g=<id> game (#v=game before one is chosen) · #d=YYYYMMDD date · #t=box mobile tab
 function writeHash() {
   const q = new URLSearchParams();
   if (state.view === 'leaders' || state.view === 'season') q.set('v', state.view);
@@ -1583,9 +1590,61 @@ function writeHash() {
   if (state.date) q.set('d', state.date);
   if (state.view === 'game' && state.gameId) q.set('g', state.gameId);
   if (state.view === 'game' && state.tab === 'box') q.set('t', 'box');
+  writeViewState(q);
   const h = q.toString();
   history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
 }
+// Shareable view state: written only when it differs from the default.
+//   game:   pf=scoring|<team abbr> (play filter) · pq=<quarter> · po=old (oldest first) · sort=<box column>[&dir=asc|desc]
+//   season: team=<abbr>|followed · q=<player search> · all=1 · sort=<metric>[&dir=asc|desc]
+function writeViewState(q) {
+  if (state.view === 'game' && state.gameId) {
+    const f = state.filterAbbr || (state.filter === 'all' ? null : state.filter === 'scoring' ? 'scoring' : teamById(state.filter)?.abbr);   // a URL team filter is pending until the game loads
+    if (f) q.set('pf', f);
+    if (state.period !== 'all') q.set('pq', state.period);
+    if (!state.newest) q.set('po', 'old');
+    if (state.sort.key !== 'GS' || state.sort.dir !== -1) {
+      q.set('sort', state.sort.key);
+      if (state.sort.dir !== boxDefaultDir(state.sort.key)) q.set('dir', state.sort.dir > 0 ? 'asc' : 'desc');
+    }
+  }
+  if (state.view === 'season') {
+    const tab = seasonState.tab, def = SEASON_TABS[tab], ss = seasonState.sort[tab];
+    if (seasonState.team) q.set('team', seasonState.team === '*' ? 'followed' : seasonState.team);
+    if (seasonState.find.trim()) q.set('q', seasonState.find.trim());
+    if (seasonState.all && tab === 'avg') q.set('all', '1');
+    if (ss.k !== def.sort) q.set('sort', ss.k);
+    if (ss.dir !== def.metrics[ss.k].best) q.set('dir', ss.dir > 0 ? 'asc' : 'desc');
+  }
+}
+
+// The URL is the source of truth on load and Back/Forward: anything it doesn't mention goes back to its default.
+function readViewState(q, view) {
+  const dir = q.get('dir') === 'asc' ? 1 : q.get('dir') === 'desc' ? -1 : null;
+  if (view === 'game') {
+    const pf = q.get('pf');
+    state.filter = pf === 'scoring' ? 'scoring' : 'all';
+    state.filterAbbr = pf && pf !== 'scoring' ? pf : null;
+    state.period = /^\d{1,2}$/.test(q.get('pq') || '') ? q.get('pq') : 'all';
+    state.newest = q.get('po') !== 'old';
+    const k = q.get('sort'), key = k === 'Player' || COLS.some(c => c.h === k) ? k : 'GS';
+    state.sort = { key, dir: dir ?? boxDefaultDir(key) };
+    syncOrder();
+    filterKey = '';                                    // rebuild the filter buttons with the new selection
+    if (state.away && state.home) renderFilters();
+    if ([...$('#period').options].some(o => o.value === state.period)) $('#period').value = state.period;
+    if (state.plays.length) renderPlays();
+    if (state.box) renderBox();
+  } else if (view === 'season') {
+    const tab = seasonState.tab, def = SEASON_TABS[tab], t = q.get('team');
+    seasonState.team = t === 'followed' ? '*' : TEAMS.includes(t) ? t : '';
+    seasonState.find = q.get('q') || '';
+    seasonState.all = q.get('all') === '1';
+    const k = def.metrics[q.get('sort')] ? q.get('sort') : def.sort;
+    seasonState.sort[tab] = { k, dir: def.both && dir ? dir : def.metrics[k].best };
+  }
+}
+
 // Start a new history entry for a user navigation; the code that follows updates it via writeHash()
 const pushNav = () => history.pushState(null, '', location.href);
 
@@ -1599,23 +1658,28 @@ function parseHash() {
 
 // Apply the URL (page load, or browser Back/Forward)
 async function applyHash(initial) {
-  const h = parseHash();
+  const h = parseHash(), q = new URLSearchParams(location.hash.slice(1));
   setTab(h.tab);
   seasonState.tab = h.s;
+  if (h.view === 'season') readViewState(q, 'season');
   if (initial || h.date !== state.date) {
     state.date = h.date;
     clearGame(h.view === 'game' ? 'Loading…' : '');
     $('#leaders').replaceChildren();
     if (h.g) state.gameId = h.g;
     setView(h.view, false);
-    if (h.view === 'game' && h.g) loadPBP();
+    if (h.view === 'game' && h.g) { readViewState(q, 'game'); writeHash(); loadPBP(); }
     if (h.view === 'season') loadSeason();
     await loadScoreboard();
     if (listing()) loadLeaders();
     return;
   }
-  if (h.view === 'game' && h.g && h.g !== state.gameId) { setView('game', false); selectGame(h.g); }
-  else { if (h.view === 'game' && !h.g && state.gameId) clearGame(); setView(h.view); }
+  if (h.view === 'game' && h.g && h.g !== state.gameId) { setView('game', false); selectGame(h.g); readViewState(q, 'game'); writeHash(); }
+  else {
+    if (h.view === 'game' && !h.g && state.gameId) clearGame();
+    if (h.view === 'game' && h.g) readViewState(q, 'game');
+    setView(h.view);
+  }
 }
 
 function measureHeader() { document.documentElement.style.setProperty('--hh', $('header').offsetHeight + 'px'); }
@@ -1647,8 +1711,9 @@ $('#navGame').onclick = () => { if (state.view === 'game' && !state.gameId) retu
 $('#navLeaders').onclick = () => go('leaders');
 $('#navSeason').onclick = () => go('season');
 $('#tabs').querySelectorAll('button').forEach(b => (b.onclick = () => setTab(b.dataset.tab)));
-$('#period').onchange = e => { state.period = e.target.value; renderPlays(); };
-$('#order').onclick = e => { state.newest = !state.newest; e.target.textContent = state.newest ? 'Newest first' : 'Oldest first'; renderPlays(); };
+$('#period').onchange = e => { state.period = e.target.value; renderPlays(); writeHash(); };
+$('#order').onclick = () => { state.newest = !state.newest; syncOrder(); renderPlays(); writeHash(); };
+const syncOrder = () => ($('#order').textContent = state.newest ? 'Newest first' : 'Oldest first');
 window.addEventListener('popstate', () => applyHash(false));
 
 // pause all polling while the tab is hidden; refresh immediately on return

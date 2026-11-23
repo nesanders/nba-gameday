@@ -31,6 +31,8 @@ downloads about 25 KB; filtering best games by team or player loads every game o
 
 URLs are shareable and the browser Back button works: (no hash) home, `#d=20261122` (date), `#g=<gameId>` (game), `#t=box` (box score tab on mobile), `#v=leaders` (top performers), `#v=season` (season; `&s=pg` or `&s=tg` for best player or team games).
 
+Sorts and filters are part of the URL too, so a link opens exactly the view you see: on a game, `pf=scoring` or `pf=MIA` (play filter), `pq=2` (quarter), `po=old` (oldest first), `sort=PTS&dir=asc` (box score); in Season, `team=DEN` or `team=followed`, `q=jokic`, `all=1`, `sort=ast&dir=asc`. Changing them replaces the URL rather than adding Back-button steps.
+
 ## Development
 
 Open `index.html` in a browser (or `npx http-server .`). Tests run the page in jsdom against recorded game data:

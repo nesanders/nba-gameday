@@ -142,7 +142,12 @@ test('season tab: best player games from the small file; filtering loads every g
   app.$$('#seasonTable tbody tr')[0].children[2].click();
   await app.settle(() => /d=20261122&g=401910029/.test(app.window.location.hash) && app.$('#status').textContent === 'Final.');
   app.window.history.back();
-  await app.settle(() => !app.$('#seasonView').hidden && app.window.location.hash === '#v=season&s=pg');
+  // ...with its filter and sort restored from the URL
+  await app.settle(() => !app.$('#seasonView').hidden && app.window.location.hash === '#v=season&s=pg&team=DET&sort=pts'
+    && app.$$('#seasonTable tbody tr').length > 0);
+  assert.equal(app.$('#seasonTeam').value, 'DET');
+  assert.ok(tableCol(app, 'Game').every(g => g.startsWith('DET')));
+  assert.equal(app.$('#seasonTable th[aria-sort]').textContent, 'PTS');
 });
 
 test('season tab: best team games; "lower is better" columns rank lowest first', async () => {
@@ -173,4 +178,36 @@ test('season tab: switching sections keeps history; missing data shows an error'
 
   const bare = await boot({ hash: '#v=season' });                     // no data files deployed yet
   await bare.settle(() => /isn’t available yet/.test(bare.$('#seasonStatus').textContent));
+});
+
+test('season URL: sort, direction, team, search and "all players" are written and restored', async () => {
+  const app = await boot({ hash: '#v=season', routes: seasonRoutes() });
+  await app.settle(() => app.$$('#seasonTable tbody tr').length > 0);
+  const hash = () => app.window.location.hash;
+  await clickHead(app, 'AST', 'descending');
+  assert.equal(hash(), '#v=season&sort=ast');
+  await clickHead(app, 'AST', 'ascending');
+  assert.equal(hash(), '#v=season&sort=ast&dir=asc');
+  app.$('#seasonAll').click();
+  assert.equal(hash(), '#v=season&all=1&sort=ast&dir=asc');
+  app.$('#seasonTeam').value = '*'; app.$('#seasonTeam').dispatchEvent(new app.window.Event('change'));
+  assert.equal(hash(), '#v=season&team=followed&all=1&sort=ast&dir=asc');
+  app.$('#seasonFind').value = 'jok'; app.$('#seasonFind').dispatchEvent(new app.window.Event('input'));
+  await app.settle(() => /q=jok/.test(hash()));
+  const n = app.window.history.length;
+  assert.equal(app.window.history.length, n, 'sorting and filtering replace the URL, they add no history');
+
+  // a shared link opens exactly that view
+  const shared = await boot({ hash: '#v=season&team=DEN&all=1&sort=ast&dir=asc', routes: seasonRoutes() });
+  await shared.settle(() => shared.$$('#seasonTable tbody tr').length > 0);
+  assert.equal(shared.$('#seasonTeam').value, 'DEN');
+  assert.equal(shared.$('#seasonAll').checked, true);
+  assert.equal(shared.$('#seasonTable th[aria-sort]').textContent, 'AST');
+  assert.equal(shared.$('#seasonTable th[aria-sort]').getAttribute('aria-sort'), 'ascending');
+  assert.ok(Array.from(shared.$$('#seasonTable tbody tr'), tr => tr.children[0].textContent).every(t => / DEN$/.test(t)));
+  // best-games tables only sort best-first: a shared "asc" for a "higher is better" column is ignored
+  const pg = await boot({ hash: '#v=season&s=pg&sort=pts&dir=asc', routes: seasonRoutes() });
+  await pg.settle(() => pg.$$('#seasonTable tbody tr').length > 0);
+  assert.equal(pg.$('#seasonTable th[aria-sort]').getAttribute('aria-sort'), 'descending');
+  assert.equal(pg.window.location.hash, '#v=season&s=pg&sort=pts');
 });

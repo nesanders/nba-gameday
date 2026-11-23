@@ -710,3 +710,45 @@ test('followed players are highlighted on leaderboards; toggling a team updates 
   assert.equal(app.$$('#leaders li.fol').length, 0);
   assert.deepEqual([...JSON.parse(app.window.localStorage.getItem('nbapbp.settings')).follow], []);
 });
+
+// ---------------------------------------------------------------- shareable URLs
+test('game URL: play filter, quarter, order and box sort are written as they change', async () => {
+  const app = await boot();
+  await app.settle(() => app.$$('#filters button').length === 4 && app.$$('table.bx').length === 2);
+  const hash = () => app.window.location.hash, n = app.window.history.length;
+  app.$$('#filters button').find(b => b.textContent === 'MIA').click();
+  assert.equal(hash(), '#g=401910030&pf=MIA');
+  app.$('#period').value = '2'; app.$('#period').dispatchEvent(new app.window.Event('change'));
+  app.$('#order').click();
+  assert.equal(hash(), '#g=401910030&pf=MIA&pq=2&po=old');
+  Array.from(app.$('table.bx thead tr').children).find(th => th.textContent === 'PTS').click();
+  assert.equal(hash(), '#g=401910030&pf=MIA&pq=2&po=old&sort=PTS');
+  Array.from(app.$('table.bx thead tr').children).find(th => th.textContent === 'PTS').click();
+  assert.equal(hash(), '#g=401910030&pf=MIA&pq=2&po=old&sort=PTS&dir=asc');
+  app.$$('#filters button').find(b => b.textContent === 'Scoring').click();
+  assert.match(hash(), /pf=scoring/);
+  assert.equal(app.window.history.length, n, 'no history entries for filters or sorts');
+  // opening another game starts from its defaults again (the box sort is kept: it is a column preference)
+  app.$('#games .g:not([aria-current=true])').click();
+  await app.settle(() => !/401910030/.test(hash()));
+  assert.doesNotMatch(hash(), /pf=|pq=/);
+});
+
+test('game URL: a shared link restores filter, quarter, order and box sort', async () => {
+  const app = await boot({ hash: '#g=401910030&pf=MIA&pq=1&po=old&sort=PTS&dir=asc' });
+  await app.settle(() => app.$$('#list li').length > 0 && app.$$('table.bx').length === 2);
+  assert.equal(app.$('#filters button[aria-pressed=true]').textContent, 'MIA');
+  assert.equal(app.$('#period').value, '1');
+  assert.equal(app.$('#order').textContent, 'Oldest first');
+  assert.ok(app.$$('#list li .tm').every(t => t.textContent === 'MIA'));
+  assert.ok(app.$$('#list .per h2').every(h => h.textContent === '1st Quarter'));
+  const clocks = app.$$('#list li .clk').map(c => c.textContent);
+  assert.equal(clocks[0] >= clocks.at(-1), true, 'oldest first: clock counts down');
+  const th = app.$('table.bx th[aria-sort]');
+  assert.deepEqual([th.textContent, th.getAttribute('aria-sort')], ['PTS', 'ascending']);
+  assert.equal(app.window.location.hash, '#g=401910030&pf=MIA&pq=1&po=old&sort=PTS&dir=asc');
+  // Back/Forward re-apply the URL: going back to a plain game link resets the view state
+  app.$('#logo').click();
+  app.window.history.back();
+  await app.settle(() => !app.$('#gameView').hidden && app.$('#filters button[aria-pressed=true]')?.textContent === 'MIA');
+});
