@@ -12,7 +12,10 @@ const pick = (o, keys) => (o == null ? o : Object.fromEntries(keys.filter(k => o
 const team = t => pick(t, ['id', 'abbreviation', 'displayName', 'shortDisplayName', 'name', 'color', 'alternateColor']);
 const status = s => s && { ...pick(s, ['displayClock', 'period']), type: pick(s.type, ['name', 'state', 'completed', 'detail', 'shortDetail']) };
 const competitor = c => ({ ...pick(c, ['id', 'homeAway', 'score', 'winner']), team: team(c.team),
-  ...(c.linescores ? { linescores: c.linescores.map(l => pick(l, ['displayValue', 'value', 'period'])) } : {}) });
+  ...(c.linescores ? { linescores: c.linescores.map(l => pick(l, ['displayValue', 'value', 'period'])) } : {}),
+  ...(c.records ? { records: c.records.slice(0, 1).map(r => pick(r, ['name', 'summary'])) } : {}),
+  ...(c.leaders ? { leaders: c.leaders.map(L => ({ name: L.name, leaders: L.leaders.slice(0, 1).map(l => ({
+    displayValue: l.displayValue, athlete: pick(l.athlete, ['displayName', 'shortName']) })) })) } : {}) });
 
 function scoreboard(d) {
   return { day: d.day, events: d.events.map(e => ({ ...pick(e, ['id', 'date', 'shortName']), status: status(e.status),

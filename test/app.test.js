@@ -459,3 +459,102 @@ test('usage counters accumulate and persist', async () => {
   const total = JSON.parse(app.window.localStorage.getItem('nbapbp.usage'));
   assert.ok(total.bytes > 0 && total.bytes === app.eval('usage.total.bytes'));
 });
+
+// ---------------------------------------------------------------- day navigation + browser history
+// Like the real API: a dated scoreboard has no `day`, and evening games start on the next UTC day.
+const datedBoard = ymd => {
+  const sb = fixture('scoreboard'), next = new Date(Date.UTC(+ymd.slice(0, 4), +ymd.slice(4, 6) - 1, +ymd.slice(6) + 1));
+  return { events: sb.events.slice(0, 2).map((e, i) => ({ ...e, id: ymd + i, date: next.toISOString().slice(0, 10) + 'T00:30Z' })) };
+};
+
+test('previous-day button keeps going back (dated responses have no `day`)', async () => {
+  const routes = defaultRoutes();
+  for (const d of ['20261121', '20261120', '20261119', '20261118']) routes['scoreboard:' + d] = datedBoard(d);
+  const app = await boot({ routes });
+  await app.settle(() => app.$$('#games .g').length === 7);
+  for (const d of ['20261121', '20261120', '20261119']) {
+    app.$('#prev').click();
+    await app.settle(() => app.calls.some(c => c.key === 'scoreboard:' + d) && app.$('#day').textContent.includes(String(+d.slice(6))));
+    assert.match(app.window.location.hash, new RegExp('d=' + d));
+  }
+  app.$('#next').click();
+  await app.settle(() => app.calls.filter(c => c.key === 'scoreboard:20261120').length === 2);
+});
+
+test('browser Back/Forward move between home, games and days', async () => {
+  const routes = defaultRoutes();
+  routes['scoreboard:20261121'] = datedBoard('20261121');
+  const app = await boot({ hash: '', routes });
+  await app.settle(() => app.$$('#homeGames .gc').length === 7);
+  app.$$('#homeGames .gc')[0].click();                                  // open the final game
+  await app.settle(() => app.$('#status').textContent === 'Final.');
+  assert.match(app.window.location.hash, /g=401910029/);
+  app.$('#prev').click();                                               // then the previous day
+  await app.settle(() => /d=20261121/.test(app.window.location.hash));
+  app.window.history.back();                                            // back to the game, on today
+  await app.settle(() => !app.$('#gameView').hidden && !/d=/.test(app.window.location.hash) && app.calls.filter(c => c.key === 'scoreboard').length >= 2);
+  app.window.history.back();                                            // back to home
+  await app.settle(() => !app.$('#homeView').hidden);
+  assert.equal(app.window.location.hash, '');
+  app.window.history.forward();
+  await app.settle(() => !app.$('#gameView').hidden && /g=401910029/.test(app.window.location.hash));
+});
+
+// ---------------------------------------------------------------- home page
+test('home is the landing page: game cards with line scores, strip hidden', async () => {
+  const app = await boot({ hash: '' });
+  await app.settle(() => app.$$('#homeGames .gc').length === 7 && app.$$('#homeLeaders .card').length === 4);
+  assert.equal(app.$('#homeView').hidden, false);
+  assert.equal(app.$('#gameView').hidden, true);
+  assert.equal(app.$('#games').hidden, true);
+  const fin = app.$$('#homeGames .gc')[0];
+  assert.deepEqual(Array.from(fin.querySelectorAll('thead th'), t => t.textContent), ['', '1', '2', '3', '4', 'T']);
+  const atl = Array.from(fin.querySelectorAll('tbody tr')[1].children, td => td.textContent);
+  assert.deepEqual(atl.slice(1), ['29', '22', '23', '33', '107']);
+  assert.match(atl[0], /^ATL\d+-\d+$/);                                 // abbreviation + record
+  const pre = app.$$('#homeGames .gc')[5];
+  assert.equal(pre.querySelector('thead'), null);
+  assert.match(pre.querySelector('.st').textContent, /PM/);
+  assert.ok(app.$$('#homeGames .gc.live').length === 4);
+  // top 3 players per team, from box data
+  assert.equal(fin.querySelectorAll('.pl .who')[0].querySelectorAll('.pp').length, 3);
+});
+
+test('home top performers: four categories, top 3 with ties, link to all categories', async () => {
+  const app = await boot({ hash: '' });
+  await app.settle(() => app.$$('#homeLeaders .card').length === 4 && /updated/.test(app.$('#homeStatus').textContent));
+  assert.deepEqual(app.$$('#homeLeaders h3').map(h => h.textContent), ['Points', 'Rebounds', 'Game Score', 'Assists'].sort((a, b) =>
+    ['Points', 'Rebounds', 'Assists', 'Game Score'].indexOf(a) - ['Points', 'Rebounds', 'Assists', 'Game Score'].indexOf(b)));
+  for (const c of app.$$('#homeLeaders .card')) assert.ok(c.querySelectorAll('li').length >= 3 && c.querySelectorAll('li').length <= 6);
+  assert.equal(app.$('#homeLeaders .card .val').textContent, '27');    // top scorer on the slate
+  app.$('#allLeaders').click();
+  await app.settle(() => !app.$('#leadersView').hidden && app.$$('#leaders .card').length === 12);
+  assert.equal(app.window.location.hash, '#v=leaders');
+});
+
+test('home cards fall back to the scoreboard team leaders when box data is unavailable', async () => {
+  const app = await boot({ hash: '', routes: { scoreboard: 'scoreboard' } });   // every summary 404s
+  await app.settle(() => /failed to load/.test(app.$('#homeStatus').textContent));
+  const fin = app.$$('#homeGames .gc')[0];
+  assert.match(fin.querySelector('.pl').textContent, /PTS N\. Alexander-Walker 27/);
+});
+
+test('logo returns home; Games from home opens the live game; cards open their game', async () => {
+  const app = await boot();
+  await app.settle(() => /^Live/.test(app.$('#status').textContent));
+  app.$('#logo').click();
+  assert.equal(app.$('#homeView').hidden, false);
+  assert.equal(app.window.location.hash, '');
+  app.$('#navGame').click();
+  await app.settle(() => !app.$('#gameView').hidden && /g=401910030/.test(app.window.location.hash));
+  app.$('#logo').click();
+  const card = app.$$('#homeGames .gc').find(c => /DEN/.test(c.textContent));
+  card.dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'Enter' }));
+  await app.settle(() => /g=401910032/.test(app.window.location.hash) && /^Live/.test(app.$('#status').textContent));
+});
+
+test('scoreboard failure on home shows the error, not "no games"', async () => {
+  const app = await boot({ hash: '', routes: {} });
+  await app.settle(() => /Couldn’t load scoreboard/.test(app.$('#homeStatus').textContent));
+  assert.ok(app.$('#homeStatus').classList.contains('err'));
+});

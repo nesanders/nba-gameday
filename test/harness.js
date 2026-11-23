@@ -34,11 +34,12 @@ function page(all, q) {
   return { count, pageIndex: p, pageSize: limit, pageCount: Math.ceil(count / limit), items: all.items.slice((p - 1) * limit, p * limit) };
 }
 
-export async function boot({ hash = '', routes = defaultRoutes(), storage = {} } = {}) {
+// Default hash opens the game view (the page itself lands on home); pass hash: '' to test the home page.
+export async function boot({ hash = '#v=game', routes = defaultRoutes(), storage = {} } = {}) {
   const calls = [], delays = [];
   let closed = false;
   const dom = new JSDOM(HTML, {
-    url: 'https://nsanders.me/' + hash,
+    url: 'https://nsanders.me/nba-gameday/' + hash,
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(w) {

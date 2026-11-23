@@ -2,8 +2,9 @@
 
 A free, ad-free, low-data NBA live dashboard: **[nsanders.me/nba-gameday](https://nsanders.me/nba-gameday)**
 
+- **Home**: every game of the day with its quarter-by-quarter line score and top three players per team, plus the day's leaders in points, rebounds, assists and Game Score. The 🏀 logo always returns here.
 - **Games**: live play-by-play (filter by scoring plays, team or quarter) next to a full box score.
-- **Box score**: counting stats plus advanced stats computed in the browser (TS%, eFG%, USG%, AST%, TOV%, rebound/steal/block rates, Game Score), team pace, possessions, offensive/defensive rating and the four factors. Pick which team is listed first.
+- **Box score**: sortable by any column (starters first, then Game Score, by default); counting stats plus advanced stats computed in the browser (TS%, eFG%, USG%, AST%, TOV%, rebound/steal/block rates, Game Score), team pace, possessions, offensive/defensive rating and the four factors. Pick which team is listed first.
 - **Top performers**: leaders across every game on a given day in 12 categories.
 - Works on phones and desktops, light and dark mode. Player names link to Basketball Reference.
 
@@ -22,7 +23,7 @@ The ⚙ button lets you change every refresh interval and shows the estimated an
 
 ## Links
 
-URLs are shareable: `#d=20261122` (date), `#g=<gameId>` (game), `#t=box` (box score tab on mobile), `#v=leaders` (top performers).
+URLs are shareable and the browser Back button works: (no hash) home, `#d=20261122` (date), `#g=<gameId>` (game), `#t=box` (box score tab on mobile), `#v=leaders` (top performers).
 
 ## Development
 

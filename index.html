@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>NBA Play-by-Play</title>
+<title>NBA Gameday</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
 <style>
 :root{--bg:#fff;--fg:#151515;--muted:#6b6b6b;--line:#e4e4e4;--card:#f4f4f5;--accent:#1d6fe0;--live:#d42020;--hl:#fff3b8;--hh:0px}
 @media (prefers-color-scheme:dark){:root{--bg:#0f0f10;--fg:#ececec;--muted:#9a9a9a;--line:#2a2a2c;--card:#1a1a1c;--accent:#6ea8ff;--live:#ff5c5c;--hl:#4a4010}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}   /* display rules elsewhere must never override the hidden attribute */
 body{margin:0;font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg)}
 a{color:inherit;text-decoration:none}
 a:hover{text-decoration:underline;color:var(--accent)}
@@ -27,6 +28,7 @@ button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);co
 header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
 .bar{display:flex;align-items:center;gap:.4rem;padding:.4rem 0;flex-wrap:wrap}
 .bar h1{font-size:1rem;margin:0;white-space:nowrap}
+.bar h1 a:hover{text-decoration:none}
 .bar .sp{flex:1}
 .bar .sm{display:none}
 #day{font-variant-numeric:tabular-nums;min-width:6.2em;text-align:center;color:var(--muted)}
@@ -54,7 +56,7 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .setgrid>button{justify-self:start}
 #usage p{margin:.25rem 0}
 #usage .now{font-weight:600}
-@media (max-width:520px){.bar h1{display:none}.bar .lg{display:none}.bar .sm{display:inline}.bar{gap:.3rem}#day{min-width:4.6em}}
+@media (max-width:520px){.bar .lt{display:none}.bar .lg{display:none}.bar .sm{display:inline}.bar{gap:.3rem}#day{min-width:4.6em}}
 
 main{padding-top:.6rem;padding-bottom:1.5rem}
 .status{font-size:12px;color:var(--muted);margin:.3rem 0;min-height:1em}
@@ -127,6 +129,30 @@ th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
 
 /* leaders */
 #leaders{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.6rem}
+
+/* home */
+.hh{display:flex;align-items:center;gap:.6rem;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:.8rem 0 .35rem}
+.hh button{font-size:12px;text-transform:none;letter-spacing:0}
+#homeLeaders{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.6rem}
+#homeGames{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:.6rem}
+@media (max-width:700px){#homeView{display:flex;flex-direction:column}#homeStatus{order:-2}#hGames{order:-1}}   /* phones: games first */
+.gc{border:1px solid var(--line);border-radius:10px;padding:.45rem .6rem .5rem;cursor:pointer;font-size:13px;min-width:0}
+.gc:hover,.gc:focus-visible{border-color:var(--accent);outline:none}
+.gc .st{font-size:11.5px;color:var(--muted);margin-bottom:.15rem}
+.gc.live .st{color:var(--live);font-weight:600}
+.gc table.ls{width:100%;font-size:12.5px}
+.ls th,.ls td{padding:.12rem .3rem;background:none;cursor:inherit}
+.ls th:first-child,.ls td:first-child{text-align:left;width:100%}
+.ls .ab{font-weight:700;border-left:3px solid var(--c,transparent);padding-left:.3rem}
+.ls .rec{color:var(--muted);font-size:11px;margin-left:.35rem;font-weight:400}
+.ls td.t{font-weight:700}
+.ls th:not(:first-child),.ls td:not(:first-child){min-width:2em}
+.ls tr:last-child td{border-bottom:0}
+.gc .pl{display:grid;grid-template-columns:2.7em 1fr;gap:.1rem .3rem;font-size:12px;margin-top:.35rem;line-height:1.35}
+.gc .pl .ab{font-weight:700;font-size:11px}
+.gc .pl .who{min-width:0;display:flex;flex-wrap:wrap;column-gap:.35rem}
+.gc .pl .pp{white-space:nowrap}
+.gc .pl .pp:not(:last-child)::after{content:" ·";color:var(--muted)}
 .card{border:1px solid var(--line);border-radius:10px;padding:.45rem .6rem}
 .card h3{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 .25rem}
 .card li{display:grid;grid-template-columns:1.3em 1fr auto;gap:.4rem;align-items:baseline;padding:.2rem 0;border-bottom:1px solid var(--line);font-size:13px}
@@ -145,7 +171,7 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
 <header>
   <div class="wrap">
     <div class="bar">
-      <h1>🏀 NBA Live</h1>
+      <h1><a href="./" id="logo" title="Home: all games and top performers">🏀<span class="lt"> NBA Gameday</span></a></h1>
       <span class="seg" role="group" aria-label="View">
         <button id="navGame" aria-pressed="true">Games</button>
         <button id="navLeaders" aria-pressed="false"><span class="lg">Top performers</span><span class="sm">Leaders</span></button>
@@ -194,6 +220,19 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
     </div>
   </section>
 
+  <!-- ===== home view ===== -->
+  <section id="homeView" hidden>
+    <p class="status" id="homeStatus"></p>
+    <div id="hLead">
+      <h2 class="hh">Top performers <button id="allLeaders">All categories →</button></h2>
+      <div id="homeLeaders"></div>
+    </div>
+    <div id="hGames">
+      <h2 class="hh">Games</h2>
+      <div id="homeGames"></div>
+    </div>
+  </section>
+
   <!-- ===== top performers view ===== -->
   <section id="leadersView" hidden>
     <p class="status" id="ldStatus"></p>
@@ -225,12 +264,12 @@ const settings = { ...DEFAULTS, ...(store.get('nbapbp.settings') || {}) };
 const sec = k => settings[k] * 1000;
 
 const state = {
-  view: 'game',      // 'game' | 'leaders'
+  view: 'home',      // 'home' | 'game' | 'leaders'
   tab: 'plays',      // mobile tab in game view
   date: null,        // YYYYMMDD; null = ESPN's "today"
   dayDate: null,     // YYYY-MM-DD reported by ESPN
   games: [],
-  gameId: null, gameState: null, statusName: '', clock: '', detail: '',
+  gameId: null, gameState: null, statusName: '', clock: '', detail: '', sbError: false,
   away: null, home: null,
   plays: [], filter: 'all', period: 'all', newest: true,
   box: null,
@@ -276,7 +315,12 @@ function team(c) {
   const t = c.team || {};
   // the summary header's team objects have `name` ("Heat") but no shortDisplayName
   return { id: String(t.id), abbr: t.abbreviation || '?', name: t.shortDisplayName || t.name || t.displayName || '',
-    color: t.color ? '#' + t.color : null, score: c.score ?? '', homeAway: c.homeAway };
+    color: t.color ? '#' + t.color : null, score: c.score ?? '', homeAway: c.homeAway,
+    lines: (c.linescores || []).map(l => l.displayValue ?? String(l.value ?? '')),
+    record: c.records?.[0]?.summary || '',
+    // scoreboard only: each team's points/rebounds/assists leader (used on home cards until box data loads)
+    leaders: (c.leaders || []).filter(L => ['points', 'rebounds', 'assists'].includes(L.name) && L.leaders?.[0])
+      .map(L => ({ cat: L.name, value: L.leaders[0].displayValue, name: L.leaders[0].athlete?.shortName || L.leaders[0].athlete?.displayName || '' })) };
 }
 
 function parseEvent(e) {
@@ -398,7 +442,11 @@ async function loadScoreboard() {
   let delay = 0;
   try {
     const d = await getJSON(API + '/scoreboard' + (state.date ? '?dates=' + state.date : ''), 'scoreboard');
-    state.dayDate = d.day?.date || d.events?.[0]?.date?.slice(0, 10) || null;
+    // Responses for a requested date carry no `day`, and game start times are UTC (evening games fall on the
+    // next UTC day), so the requested date is the only reliable label. `day` is present for "today".
+    state.dayDate = state.date ? state.date.replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3')
+      : d.day?.date || d.events?.[0]?.date?.slice(0, 10) || null;
+    state.sbError = false;
     state.games = (d.events || []).map(parseEvent);
     // the watched game is refreshed more often than the scoreboard: keep our fresher score/clock on its tile
     const sel = state.view === 'game' && state.detail && state.games.find(g => g.id === state.gameId);
@@ -407,14 +455,16 @@ async function loadScoreboard() {
       sel.away.score = state.away.score; sel.home.score = state.home.score;
     }
     renderDay(); renderGames();
+    if (state.view === 'home') renderHome();
     if (!state.games.some(g => g.id === state.gameId)) {
-      const pick = state.games.find(g => g.state === 'in') || state.games.find(g => g.state === 'pre') || state.games[0];
+      const pick = defaultGame();
       if (pick) selectGame(pick.id); else clearGame('No games on this day.');
     }
     if (state.games.some(g => g.state === 'in')) delay = sec('others');
     else if (state.games.some(g => g.state === 'pre')) delay = MS.preSb;
   } catch (e) {
-    setStatus('#status', 'Couldn’t load scoreboard (' + e.message + '). Retrying…', true);
+    state.sbError = true;
+    setStatus(viewStatus(), 'Couldn’t load scoreboard (' + e.message + '). Retrying…', true);
     delay = MS.err;
   }
   if (delay && !document.hidden) sched('sb', loadScoreboard, delay);
@@ -448,7 +498,14 @@ function renderGames() {
 }
 
 // ---------------------------------------------------------------- game view
-function openGame(id) { if (state.view !== 'game') setView('game', false); selectGame(id); }
+const defaultGame = () => state.games.find(g => g.state === 'in') || state.games.find(g => g.state === 'pre') || state.games[0];
+// user navigation to a game: a new history entry, so the browser Back button returns to where they were
+function openGame(id) {
+  if (state.view === 'game' && id === state.gameId) return;
+  pushNav();
+  if (state.view !== 'game') setView('game', false);
+  if (id === state.gameId) loadPBP(); else selectGame(id);
+}
 
 function selectGame(id) {
   if (id === state.gameId && (state.plays.length || state.box)) { renderGames(); return; }
@@ -942,9 +999,10 @@ async function pool(items, n, fn) {
   await Promise.all(Array.from({ length: Math.min(n, q.length) }, async () => { while (q.length) await fn(q.shift()); }));
 }
 
+// Per-game box data for every started game; feeds both the home page and the Top performers view.
 async function loadLeaders() {
   stop('ld');
-  if (state.view !== 'leaders') return;
+  if (state.view === 'game') return;
   const date = state.date;
   const started = state.games.filter(g => g.state !== 'pre');
   const todo = started.filter(g => {
@@ -952,7 +1010,8 @@ async function loadLeaders() {
     const c = leaders.get(g.id);
     return !(c && (c.final || Date.now() - (c.at || 0) < sec('leaders') / 2));   // skip finals and just-fetched games
   });
-  if (todo.length) setStatus('#ldStatus', 'Loading ' + todo.length + ' game' + (todo.length > 1 ? 's' : '') + '…');
+  if (state.view === 'home') renderHome();          // cached finals + scoreboard data, before the fetches finish
+  if (todo.length) setStatus(viewStatus(), 'Loading ' + todo.length + ' game' + (todo.length > 1 ? 's' : '') + '…');
   let failed = 0;
   await pool(todo, LEADER_CONCURRENCY, async g => {
     try {
@@ -962,58 +1021,126 @@ async function loadLeaders() {
       if (box) ingestLeaders(g.id, box, st === 'post');
     } catch { failed++; }
   });
-  if (state.view !== 'leaders' || date !== state.date) return;
-  renderLeaders();
+  if (state.view === 'game' || date !== state.date) return;
+  if (state.view === 'home') renderHome(); else renderLeaders();
+  if (state.sbError) return;                         // keep the scoreboard error visible
   const anyLive = state.games.some(g => g.state === 'in'), pre = state.games.some(g => g.state === 'pre');
   const msg = !state.games.length ? 'No games on this day.'
     : !started.length ? 'No games have started yet.'
     : started.length + ' of ' + state.games.length + ' games · updated ' + new Date().toLocaleTimeString() + (anyLive ? ' · live games refresh every ' + settings.leaders + 's' : '');
-  setStatus('#ldStatus', failed ? msg + ' · ' + failed + ' failed to load' : msg, !!failed);
+  setStatus(viewStatus(), failed ? msg + ' · ' + failed + ' failed to load' : msg, !!failed);
   if ((anyLive || pre || failed) && !document.hidden) sched('ld', loadLeaders, anyLive || failed ? sec('leaders') : MS.preSb);
 }
 
-function renderLeaders() {
+const dayRows = () => {
   const ids = new Set(state.games.map(g => g.id));
-  const liveIds = new Set(state.games.filter(g => g.state === 'in').map(g => g.id));
-  const rows = [...leaders].filter(([id]) => ids.has(id)).flatMap(([, e]) => e.rows);
-  const box = $('#leaders');
-  box.replaceChildren();
-  if (!rows.length) return;
-  for (const c of CATS) {
-    const vals = rows.map(r => ({ r, v: c.v(r) })).filter(x => x.v != null && Number.isFinite(x.v)).sort((a, b) => b.v - a.v);
-    if (!vals.length) continue;
-    const cut = vals[Math.min(4, vals.length - 1)].v;
-    const list = vals.filter((x, i) => i < 5 || x.v === cut).slice(0, 8);
-    const card = el('div', 'card');
-    card.append(el('h3', null, c.h));
-    const ol = el('ol');
-    ol.style.cssText = 'list-style:none;margin:0;padding:0';
-    let rank = 0, last = null;
-    list.forEach((x, i) => {
-      if (x.v !== last) { rank = i + 1; last = x.v; }
-      const r = x.r, li = el('li');
-      const who = el('span');
-      const a = el('a', null, r.name);
-      a.href = bbref(r.name); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = r.name + ' on Basketball Reference';
-      const sub = el('span', 'sub');
-      const gb = el('button', null, r.tm + ' vs ' + r.op);
-      gb.title = 'Open game'; gb.onclick = () => openGame(r.g);
-      sub.append(gb, document.createTextNode(' · ' + r.pts + 'p ' + r.reb + 'r ' + r.ast + 'a · ' + r.fgm + '-' + r.fga + ' FG'));
-      if (liveIds.has(r.g)) sub.append(el('span', 'dot', ' ● live'));
-      who.append(a, sub);
-      li.append(el('span', 'rk', String(rank)), who, el('span', 'val', c.f ? c.f(x.v) : String(x.v)));
-      ol.append(li);
-    });
-    card.append(ol);
-    box.append(card);
+  return [...leaders].filter(([id]) => ids.has(id)).flatMap(([, e]) => e.rows);
+};
+
+// One category card: top n (ties at the cut included, up to n + 3 rows).
+function leaderCard(c, rows, n, liveIds) {
+  const vals = rows.map(r => ({ r, v: c.v(r) })).filter(x => x.v != null && Number.isFinite(x.v)).sort((a, b) => b.v - a.v);
+  if (!vals.length) return null;
+  const cut = vals[Math.min(n - 1, vals.length - 1)].v;
+  const list = vals.filter((x, i) => i < n || x.v === cut).slice(0, n + 3);
+  const card = el('div', 'card');
+  card.append(el('h3', null, c.h));
+  const ol = el('ol');
+  ol.style.cssText = 'list-style:none;margin:0;padding:0';
+  let rank = 0, last = null;
+  list.forEach((x, i) => {
+    if (x.v !== last) { rank = i + 1; last = x.v; }
+    const r = x.r, li = el('li');
+    const who = el('span');
+    const a = el('a', null, r.name);
+    a.href = bbref(r.name); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = r.name + ' on Basketball Reference';
+    const sub = el('span', 'sub');
+    const gb = el('button', null, r.tm + ' vs ' + r.op);
+    gb.title = 'Open game'; gb.onclick = () => openGame(r.g);
+    sub.append(gb, document.createTextNode(' · ' + r.pts + 'p ' + r.reb + 'r ' + r.ast + 'a · ' + r.fgm + '-' + r.fga + ' FG'));
+    if (liveIds.has(r.g)) sub.append(el('span', 'dot', ' ● live'));
+    who.append(a, sub);
+    li.append(el('span', 'rk', String(rank)), who, el('span', 'val', c.f ? c.f(x.v) : String(x.v)));
+    ol.append(li);
+  });
+  card.append(ol);
+  return card;
+}
+const liveGameIds = () => new Set(state.games.filter(g => g.state === 'in').map(g => g.id));
+
+function renderLeaders() {
+  const rows = dayRows(), liveIds = liveGameIds();
+  $('#leaders').replaceChildren(...(rows.length ? CATS.map(c => leaderCard(c, rows, 5, liveIds)).filter(Boolean) : []));
+}
+
+// ---------------------------------------------------------------- home: every game's line score + top players, and a leaders summary
+const HOME_CATS = ['Points', 'Rebounds', 'Assists', 'Game Score'];
+const periodHead = n => (n <= 4 ? String(n) : n === 5 ? 'OT' : n - 4 + 'OT');
+
+function renderHome() {
+  const rows = dayRows(), liveIds = liveGameIds();
+  const cards = rows.length ? CATS.filter(c => HOME_CATS.includes(c.h)).map(c => leaderCard(c, rows, 3, liveIds)).filter(Boolean) : [];
+  $('#homeLeaders').replaceChildren(...(cards.length ? cards
+    : [el('p', 'muted', state.games.some(g => g.state !== 'pre') ? 'Loading…' : 'Top performers appear once games start.')]));
+  $('#allLeaders').hidden = !cards.length;
+  $('#homeGames').replaceChildren(...(state.games.length ? state.games.map(gameCard) : [el('p', 'muted', 'No games on this day.')]));
+}
+
+function gameCard(g) {
+  const card = el('article', 'gc' + (g.state === 'in' ? ' live' : ''));
+  card.tabIndex = 0;
+  card.setAttribute('role', 'link');
+  card.setAttribute('aria-label', (g.away?.name || g.away?.abbr) + ' at ' + (g.home?.name || g.home?.abbr) + ', ' + g.detail);
+  card.onclick = e => { if (!e.target.closest('a')) openGame(g.id); };
+  card.onkeydown = e => { if (e.key === 'Enter' && e.target === card) openGame(g.id); };
+  card.append(el('div', 'st', (g.state === 'in' ? '● ' : '') + g.detail));
+
+  const teams = [g.away, g.home].filter(Boolean);
+  const started = g.state !== 'pre';
+  const n = started ? Math.max(4, ...teams.map(t => t.lines.length)) : 0;
+  const tbl = el('table', 'ls');
+  if (started) {
+    const hr = el('tr');
+    hr.append(el('th'));
+    for (let i = 1; i <= n; i++) hr.append(el('th', null, periodHead(i)));
+    hr.append(el('th', null, 'T'));
+    const th = el('thead'); th.append(hr); tbl.append(th);
   }
+  const tb = el('tbody');
+  for (const t of teams) {
+    const tr = el('tr'), name = el('td');
+    const ab = el('span', 'ab', t.abbr);
+    if (t.color) ab.style.setProperty('--c', t.color);
+    name.append(ab);
+    if (t.record) name.append(el('span', 'rec', t.record));
+    tr.append(name);
+    for (let i = 0; i < n; i++) tr.append(el('td', null, t.lines[i] ?? ''));
+    if (started) tr.append(el('td', 't', String(t.score)));
+    tb.append(tr);
+  }
+  tbl.append(tb);
+  card.append(tbl);
+
+  // top 3 players per team by Game Score once box data is in; until then the scoreboard's team leaders
+  const entry = leaders.get(g.id);
+  const pl = el('div', 'pl');
+  for (const t of teams) {
+    const top = (entry?.rows || []).filter(r => r.tm === t.abbr).sort((a, b) => (b.gmsc ?? -99) - (a.gmsc ?? -99)).slice(0, 3);
+    const who = el('div', 'who');
+    if (top.length) top.forEach(r => who.append(el('span', 'pp', r.short + ' ' + r.pts + 'p ' + r.reb + 'r ' + r.ast + 'a')));
+    else if (started) t.leaders.forEach(L => who.append(el('span', 'pp', ({ points: 'PTS', rebounds: 'REB', assists: 'AST' })[L.cat] + ' ' + L.name + ' ' + L.value)));
+    if (!who.childNodes.length) continue;
+    pl.append(el('span', 'ab', t.abbr), who);
+  }
+  if (pl.childNodes.length) card.append(pl);
+  return card;
 }
 
 // ---------------------------------------------------------------- settings + data usage
 const CHOICES = {
   live: [5, 10, 20, 30, 60], box: [30, 60, 120, 300], others: [30, 60, 120, 300], leaders: [30, 60, 120, 300],
 };
-const SET_LABELS = { live: 'Watched live game', box: 'Its box score', others: 'Other games (scores)', leaders: 'Top performers' };
+const SET_LABELS = { live: 'Watched live game', box: 'Its box score', others: 'Other games (scores)', leaders: 'Home & top performers' };
 const fmtSec = n => (n < 60 ? n + 's' : n / 60 + ' min');
 const fmtB = b => (b < 1e3 ? Math.round(b) + ' B' : b < 1e6 ? Math.round(b / 1e3) + ' KB' : (b / 1e6).toFixed(b < 1e7 ? 1 : 0) + ' MB');
 
@@ -1073,8 +1200,8 @@ function renderUsage() {
   const box = $('#usage');
   const nLive = state.games.filter(g => g.state === 'in').length;
   const watching = state.view === 'game' && state.gameState === 'in';
-  const now = document.hidden ? 0 : state.view === 'leaders' ? perMinute('leaders', nLive) : perMinute(watching ? 'game' : 'scores', nLive);
-  const nowWhat = state.view === 'leaders' ? 'Top performers with ' + nLive + ' live game' + (nLive === 1 ? '' : 's')
+  const now = document.hidden ? 0 : state.view !== 'game' ? perMinute('leaders', nLive) : perMinute(watching ? 'game' : 'scores', nLive);
+  const nowWhat = state.view !== 'game' ? (state.view === 'home' ? 'Home page' : 'Top performers') + ' with ' + nLive + ' live game' + (nLive === 1 ? '' : 's')
     : watching ? 'Watching ' + (state.away?.abbr || '') + '–' + (state.home?.abbr || '') + ' live'
     : nLive ? 'Scores only (' + nLive + ' live game' + (nLive === 1 ? '' : 's') + ')' : 'No live games: nothing to refresh';
   const tbl = el('table'), th = el('tr');
@@ -1089,7 +1216,7 @@ function renderUsage() {
   };
   row('Right now', now, 'now', nowWhat);
   row('Watching one live game', perMinute('game', Math.max(1, nLive)));
-  row('Top performers, 5 live games', perMinute('leaders', 5));
+  row('Home or top performers, 5 live games', perMinute('leaders', 5));
   tbl.append(thead, tb);
   const used = el('p', 'muted', 'Used this visit: ' + fmtB(usage.bytes) + ' in ' + usage.requests + ' request' + (usage.requests === 1 ? '' : 's') +
     ' · since ' + new Date(usage.total.since).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ': ' + fmtB(usage.total.bytes) + ' ');
@@ -1111,18 +1238,24 @@ $('#gear').onclick = () => {
 
 // ---------------------------------------------------------------- views, routing, misc
 function setStatus(sel, msg, err) { const s = $(sel); s.textContent = msg; s.classList.toggle('err', !!err); }
+const viewStatus = () => ({ game: '#status', leaders: '#ldStatus', home: '#homeStatus' })[state.view];
 
 function setView(v, load = true) {
   state.view = v;
   $('#gameView').hidden = v !== 'game';
   $('#leadersView').hidden = v !== 'leaders';
+  $('#homeView').hidden = v !== 'home';
+  $('#games').hidden = v === 'home';                 // home shows every game as a card instead of the strip
   $('#navGame').setAttribute('aria-pressed', String(v === 'game'));
   $('#navLeaders').setAttribute('aria-pressed', String(v === 'leaders'));
   stop('pbp'); stop('ld');
-  writeHash(); renderGames();
+  writeHash(); renderGames(); measureHeader();
+  if (v === 'home') renderHome(); else if (v === 'leaders') renderLeaders();
   if (!load) return;
-  if (v === 'game') { if (state.gameId) loadPBP(); }
-  else loadLeaders();
+  if (v === 'game') {
+    if (state.gameId) loadPBP();
+    else { const pick = defaultGame(); if (pick) selectGame(pick.id); }
+  } else loadLeaders();
 }
 
 function setTab(t) {
@@ -1132,14 +1265,44 @@ function setTab(t) {
   writeHash();
 }
 
+// URL: (nothing) home · #v=leaders · #g=<id> game (#v=game before one is chosen) · #d=YYYYMMDD date · #t=box mobile tab
 function writeHash() {
   const q = new URLSearchParams();
   if (state.view === 'leaders') q.set('v', 'leaders');
+  if (state.view === 'game' && !state.gameId) q.set('v', 'game');
   if (state.date) q.set('d', state.date);
   if (state.view === 'game' && state.gameId) q.set('g', state.gameId);
   if (state.view === 'game' && state.tab === 'box') q.set('t', 'box');
   const h = q.toString();
   history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
+}
+// Start a new history entry for a user navigation; the code that follows updates it via writeHash()
+const pushNav = () => history.pushState(null, '', location.href);
+
+function parseHash() {
+  const q = new URLSearchParams(location.hash.slice(1));
+  const g = q.get('g');
+  return { date: /^\d{8}$/.test(q.get('d') || '') ? q.get('d') : null, g,
+    view: q.get('v') === 'leaders' ? 'leaders' : g || q.get('v') === 'game' ? 'game' : 'home', tab: q.get('t') === 'box' ? 'box' : 'plays' };
+}
+
+// Apply the URL (page load, or browser Back/Forward)
+async function applyHash(initial) {
+  const h = parseHash();
+  setTab(h.tab);
+  if (initial || h.date !== state.date) {
+    state.date = h.date;
+    clearGame(h.view === 'game' ? 'Loading…' : '');
+    $('#leaders').replaceChildren();
+    if (h.g) state.gameId = h.g;
+    setView(h.view, false);
+    if (h.view === 'game' && h.g) loadPBP();
+    await loadScoreboard();
+    if (h.view !== 'game') loadLeaders();
+    return;
+  }
+  if (h.view === 'game' && h.g && h.g !== state.gameId) { setView('game', false); selectGame(h.g); }
+  else setView(h.view);
 }
 
 function measureHeader() { document.documentElement.style.setProperty('--hh', $('header').offsetHeight + 'px'); }
@@ -1147,47 +1310,43 @@ window.addEventListener('resize', measureHeader);
 
 const ymd = d => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
 async function changeDate(date) {
+  pushNav();
   state.date = date;
-  clearGame('Loading…');
+  clearGame(state.view === 'game' ? 'Loading…' : '');
   $('#leaders').replaceChildren();
   await loadScoreboard();
-  if (state.view === 'leaders') loadLeaders();
+  if (state.view !== 'game') loadLeaders();
 }
 function shiftDay(n) {
-  const base = state.dayDate ? new Date(state.dayDate + 'T12:00:00') : new Date();
+  const base = new Date((state.dayDate || ymd(new Date()).replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3')) + 'T12:00:00');
   base.setDate(base.getDate() + n);
   changeDate(ymd(base));
 }
+const go = v => { if (state.view !== v) { pushNav(); setView(v); } };
 
 $('#prev').onclick = () => shiftDay(-1);
 $('#next').onclick = () => shiftDay(1);
 $('#today').onclick = () => changeDate(null);
-$('#navGame').onclick = () => setView('game');
-$('#navLeaders').onclick = () => setView('leaders');
+$('#logo').onclick = e => { e.preventDefault(); go('home'); };
+$('#allLeaders').onclick = () => go('leaders');
+$('#navGame').onclick = () => go('game');
+$('#navLeaders').onclick = () => go('leaders');
 $('#tabs').querySelectorAll('button').forEach(b => (b.onclick = () => setTab(b.dataset.tab)));
 $('#period').onchange = e => { state.period = e.target.value; renderPlays(); };
 $('#order').onclick = e => { state.newest = !state.newest; e.target.textContent = state.newest ? 'Newest first' : 'Oldest first'; renderPlays(); };
+window.addEventListener('popstate', () => applyHash(false));
 
 // pause all polling while the tab is hidden; refresh immediately on return
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { Object.keys(timers).forEach(stop); return; }
   loadScoreboard();
   if (state.view === 'game' && state.gameId) loadPBP();
-  if (state.view === 'leaders') loadLeaders();
+  if (state.view !== 'game') loadLeaders();
 });
 
-// restore from hash, e.g. #d=20261122&g=401704123&t=box  or  #v=leaders&d=20261122
-(async () => {
-  const q = new URLSearchParams(location.hash.slice(1));
-  if (/^\d{8}$/.test(q.get('d') || '')) state.date = q.get('d');
-  if (q.get('t') === 'box') setTab('box');
-  const v = q.get('v') === 'leaders' ? 'leaders' : 'game';
-  setView(v, false);
-  if (v === 'game' && q.get('g')) { state.gameId = q.get('g'); setStatus('#status', 'Loading…'); loadPBP(); }
-  measureHeader();
-  await loadScoreboard();
-  if (v === 'leaders') loadLeaders();
-})();
+// restore from the URL, e.g. #d=20261122&g=401704123&t=box  or  #v=leaders&d=20261122
+measureHeader();
+applyHash(true);
 </script>
 </body>
 </html>
