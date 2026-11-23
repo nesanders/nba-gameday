@@ -539,15 +539,46 @@ test('home cards fall back to the scoreboard team leaders when box data is unava
   assert.match(fin.querySelector('.pl').textContent, /PTS N\. Alexander-Walker 27/);
 });
 
-test('logo returns home; Games from home opens the live game; cards open their game', async () => {
+test('Games shows a grid of all games (from anywhere); a card opens its game; Back returns to the grid', async () => {
+  const app = await boot();                                          // inside the live OKC@MIA game
+  await app.settle(() => /^Live/.test(app.$('#status').textContent));
+  assert.equal(app.$('#games').hidden, false);                       // header strip shows inside a game
+  app.$('#navGame').click();
+  await app.settle(() => app.$$('#gameList .gc').length === 7);
+  assert.equal(app.window.location.hash, '#v=game');
+  assert.equal(app.$('#gameView').dataset.mode, 'list');
+  assert.equal(app.$('#games').hidden, true);                        // ...but not above the grid
+  assert.equal(app.$('#navGame').getAttribute('aria-pressed'), 'true');
+  assert.equal(app.calls.filter(c => c.key === 'summary:401910030').length >= 1, true);
+  await app.settle(() => /updated/.test(app.$('#status').textContent)); // box data for the cards' top players
+  assert.equal(app.$$('#gameList .gc')[0].querySelectorAll('.pl .who')[0].querySelectorAll('.pp').length, 3);
+  app.$$('#gameList .gc').find(c => /DEN/.test(c.textContent)).click();
+  await app.settle(() => /g=401910032/.test(app.window.location.hash) && /^Live/.test(app.$('#status').textContent));
+  assert.equal(app.$('#gameView').dataset.mode, 'game');
+  app.window.history.back();
+  await app.settle(() => app.$('#gameView').dataset.mode === 'list' && app.window.location.hash === '#v=game');
+});
+
+test('a #v=game link opens the grid and never auto-picks a game', async () => {
+  const app = await boot({ hash: '#v=game' });
+  await app.settle(() => app.$$('#gameList .gc').length === 7 && /updated/.test(app.$('#status').textContent));
+  assert.equal(app.calls.filter(c => c.key === 'summary:401910030').length, 1);   // only the shared box-data pass
+  assert.equal(app.delays.some(d => d.fn === 'loadPBP'), false);
+  assert.equal(app.window.location.hash, '#v=game');
+});
+
+test('box score: Game Score is right after GS', async () => {
+  const app = await boot();
+  await app.settle(() => app.$$('table.bx').length === 2);
+  assert.deepEqual(Array.from(app.$('table.bx thead tr').children, th => th.textContent).slice(0, 4), ['Player', 'GS', 'GmSc', 'MIN']);
+});
+
+test('logo returns home; home cards open their game', async () => {
   const app = await boot();
   await app.settle(() => /^Live/.test(app.$('#status').textContent));
   app.$('#logo').click();
   assert.equal(app.$('#homeView').hidden, false);
   assert.equal(app.window.location.hash, '');
-  app.$('#navGame').click();
-  await app.settle(() => !app.$('#gameView').hidden && /g=401910030/.test(app.window.location.hash));
-  app.$('#logo').click();
   const card = app.$$('#homeGames .gc').find(c => /DEN/.test(c.textContent));
   card.dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'Enter' }));
   await app.settle(() => /g=401910032/.test(app.window.location.hash) && /^Live/.test(app.$('#status').textContent));

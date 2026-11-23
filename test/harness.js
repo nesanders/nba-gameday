@@ -34,8 +34,8 @@ function page(all, q) {
   return { count, pageIndex: p, pageSize: limit, pageCount: Math.ceil(count / limit), items: all.items.slice((p - 1) * limit, p * limit) };
 }
 
-// Default hash opens the game view (the page itself lands on home); pass hash: '' to test the home page.
-export async function boot({ hash = '#v=game', routes = defaultRoutes(), storage = {} } = {}) {
+// Default hash opens the live OKC@MIA game (the page itself lands on home); pass hash: '' for home, '#v=game' for the games grid.
+export async function boot({ hash = '#g=401910030', routes = defaultRoutes(), storage = {} } = {}) {
   const calls = [], delays = [];
   let closed = false;
   const dom = new JSDOM(HTML, {

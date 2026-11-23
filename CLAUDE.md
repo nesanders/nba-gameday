@@ -17,12 +17,12 @@ Run tests: `npm test`.
 - Dense and readable at 360 px and desktop (≥1000 px shows plays and box side by side); light/dark via `prefers-color-scheme`.
 
 ## Views and routing
-- Three views: `home` (default, empty hash), `game` (`#g=<id>`, or `#v=game` before one is picked), `leaders` (`#v=leaders`); plus `#d=YYYYMMDD` and `#t=box`. `applyHash()` applies the URL on load and on `popstate`.
-- User navigations call `pushNav()` (pushState of the current URL) and then mutate state; every state change rewrites the current entry with `writeHash()` (replaceState). Automatic changes (e.g. auto-picking a live game) only replace. This is what makes browser Back/Forward work.
-- Home and Top performers share `loadLeaders()` (summaries for every started game, finals cached, interval `settings.leaders`). Home cards render immediately from the scoreboard (line scores, records, each team's PTS/REB/AST leader) and switch to the top three players by Game Score once box data arrives.
+- Three views: `home` (default, empty hash), `game`, `leaders` (`#v=leaders`); plus `#d=YYYYMMDD` and `#t=box`. The game view has two modes (`#gameView[data-mode]`, set by `syncMode()`): `#v=game` is a grid of game cards, `#g=<id>` is one game. The "Games" button always goes to the grid; no game is ever auto-picked. The header strip of games shows only inside a game. `applyHash()` applies the URL on load and on `popstate`.
+- User navigations call `pushNav()` (pushState of the current URL) and then mutate state; every state change rewrites the current entry with `writeHash()` (replaceState). This is what makes browser Back/Forward work.
+- "Listing" pages (`listing()`: home, the games grid, Top performers) share `loadLeaders()` (summaries for every started game, finals cached, interval `settings.leaders`) and `renderListing()`. Game cards (`gameCard()`) render immediately from the scoreboard (line scores, records, each team's PTS/REB/AST leader) and switch to the top three players by Game Score once box data arrives.
 - Dated scoreboard responses have **no `day` field** and start times are UTC, so the displayed date comes from the requested date (`state.date`), never from event times. Getting this wrong made the previous-day button get stuck.
 - CSS has a global `[hidden]{display:none!important}`: several elements have `display` rules that would otherwise override the attribute.
-- Tests: `boot()` defaults to `#v=game`; pass `hash: ''` to test the home page.
+- Tests: `boot()` defaults to `#g=401910030` (a live game); pass `hash: ''` for home or `'#v=game'` for the games grid.
 
 ## Live loop
 - First load and box refreshes use the full game summary (~35 KB gzip). Between them, the lightweight path fetches the core API's `…/competitions/<id>/status` (~0.3 KB) and `…/plays?limit=25&page=⌊have/25⌋+1` (~2 KB), merging plays by id (ids are identical in both APIs; the core API is often a play or two ahead). Score comes from the newest play.
@@ -48,4 +48,4 @@ Run tests: `npm test`.
 `COLS[].w` (em) are fixed so both team tables align and scroll together. They were sized from the widest header/value measured in Chromium across real games; re-measure if you add columns or change the font.
 
 ## Box score sorting
-Every column header (including Player, by last name) sorts both team tables together; click again to reverse. Default `state.sort` is `GS` (starter) descending with Game Score as the tie-breaker, i.e. starters first, each group by GmSc. Blank values (e.g. FG% with no attempts) always sort last. Made-attempted columns sort by makes, then attempts. The sort is not persisted: every visit starts from the default.
+Every column header (including Player, by last name) sorts both team tables together; click again to reverse. Column order starts Player, GS, GmSc. Default `state.sort` is `GS` (starter) descending with Game Score as the tie-breaker, i.e. starters first, each group by GmSc. Blank values (e.g. FG% with no attempts) always sort last. Made-attempted columns sort by makes, then attempts. The sort is not persisted: every visit starts from the default.

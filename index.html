@@ -134,7 +134,8 @@ th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
 .hh{display:flex;align-items:center;gap:.6rem;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:.8rem 0 .35rem}
 .hh button{font-size:12px;text-transform:none;letter-spacing:0}
 #homeLeaders{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.6rem}
-#homeGames{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:.6rem}
+#gameView[data-mode=list] #score,#gameView[data-mode=list] #tabs,#gameView[data-mode=list] #panes,#gameView[data-mode=game] #gameList{display:none}
+#homeGames,#gameList{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:.6rem}
 @media (max-width:700px){#homeView{display:flex;flex-direction:column}#homeStatus{order:-2}#hGames{order:-1}}   /* phones: games first */
 .gc{border:1px solid var(--line);border-radius:10px;padding:.45rem .6rem .5rem;cursor:pointer;font-size:13px;min-width:0}
 .gc:hover,.gc:focus-visible{border-color:var(--accent);outline:none}
@@ -197,9 +198,10 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
 
 <main class="wrap">
   <!-- ===== game view ===== -->
-  <section id="gameView" data-tab="plays">
+  <section id="gameView" data-tab="plays" data-mode="list">
     <div id="score" hidden aria-live="polite"></div>
     <p class="status" id="status"></p>
+    <div id="gameList"></div>
     <div id="tabs" class="seg" role="tablist">
       <button data-tab="plays" aria-pressed="true">Play-by-play</button>
       <button data-tab="box" aria-pressed="false">Box score</button>
@@ -465,11 +467,7 @@ async function loadScoreboard() {
       sel.away.score = state.away.score; sel.home.score = state.home.score;
     }
     renderDay(); renderGames();
-    if (state.view === 'home') renderHome();
-    if (!state.games.some(g => g.id === state.gameId)) {
-      const pick = defaultGame();
-      if (pick) selectGame(pick.id); else clearGame('No games on this day.');
-    }
+    renderListing();
     if (state.games.some(g => g.state === 'in')) delay = sec('others');
     else if (state.games.some(g => g.state === 'pre')) delay = MS.preSb;
   } catch (e) {
@@ -508,7 +506,23 @@ function renderGames() {
 }
 
 // ---------------------------------------------------------------- game view
-const defaultGame = () => state.games.find(g => g.state === 'in') || state.games.find(g => g.state === 'pre') || state.games[0];
+// "Listing" pages show every game: home, Top performers, and the Games view before a game is opened.
+// They share the per-game box data loop (loadLeaders).
+const listing = () => state.view !== 'game' || !state.gameId;
+function renderListing() {
+  if (state.view === 'home') renderHome();
+  else if (state.view === 'leaders') renderLeaders();
+  else if (!state.gameId) renderGameList();
+}
+function renderGameList() {
+  $('#gameList').replaceChildren(...(state.games.length ? state.games.map(gameCard) : [el('p', 'muted', 'No games on this day.')]));
+}
+// game view shows either the card grid or one game; the header strip only appears inside a game
+function syncMode() {
+  $('#gameView').dataset.mode = state.gameId ? 'game' : 'list';
+  $('#games').hidden = state.view === 'home' || (state.view === 'game' && !state.gameId);
+  measureHeader();
+}
 // user navigation to a game: a new history entry, so the browser Back button returns to where they were
 function openGame(id) {
   if (state.view === 'game' && id === state.gameId) return;
@@ -519,8 +533,9 @@ function openGame(id) {
 
 function selectGame(id) {
   if (id === state.gameId && (state.plays.length || state.box)) { renderGames(); return; }
-  stop('pbp'); resetLive();
+  stop('pbp'); stop('ld'); resetLive();
   Object.assign(state, { gameId: id, plays: [], box: null, filter: 'all', period: 'all' });
+  syncMode();
   periodCount = 0; filterKey = '';
   $('#period').replaceChildren(new Option('All', 'all'));
   $('#list').replaceChildren(); sections = new Map();
@@ -539,6 +554,7 @@ function clearGame(msg) {
   $('#box').replaceChildren(); $('#topSel').replaceChildren();
   $('#empty').hidden = true;
   setStatus('#status', msg || '');
+  syncMode();
   writeHash();
 }
 
@@ -770,6 +786,7 @@ const sg = v => (v == null ? '' : v > 0 ? '+' + v : String(v));
 // Sized from the widest header/value measured in Chromium across real games (incl. padding).
 const COLS = [
   { h: 'GS', t: 'Started the game', w: 2.4, v: r => (r.starter ? '●' : ''), s: r => (r.starter ? 1 : 0), cls: 'gs' },
+  { h: 'GmSc', t: 'Game Score (Hollinger): rough single-number productivity, ~10 average, 40+ outstanding', w: 3.9, v: r => f1(r.a?.gmsc) },
   { h: 'MIN', t: 'Minutes played', w: 3, v: r => f0(r.min) },
   { h: 'PTS', t: 'Points', w: 3, v: r => r.pts, k: 1 },
   { h: 'REB', t: 'Total rebounds', w: 3, v: r => r.reb },
@@ -800,7 +817,6 @@ const COLS = [
   { h: '3PAr', t: '3-point attempt rate: 3PA / FGA', w: 3.9, v: r => f3(r.a?.tpar) },
   { h: 'FTr', t: 'Free throw rate: FTA / FGA', w: 3.9, v: r => f3(r.a?.ftr) },
   { h: 'AST/TO', t: 'Assist to turnover ratio', w: 4.8, v: r => f1(r.a?.ato) },
-  { h: 'GmSc', t: 'Game Score (Hollinger): rough single-number productivity, ~10 average, 40+ outstanding', w: 3.9, v: r => f1(r.a?.gmsc) },
 ];
 const NAME_W = 9.6;   // long names ("N. Alexander-Walker F") still ellipsize; full name is in the link title
 
@@ -1012,7 +1028,7 @@ async function pool(items, n, fn) {
 // Per-game box data for every started game; feeds both the home page and the Top performers view.
 async function loadLeaders() {
   stop('ld');
-  if (state.view === 'game') return;
+  if (!listing()) return;
   const date = state.date;
   const started = state.games.filter(g => g.state !== 'pre');
   const todo = started.filter(g => {
@@ -1020,7 +1036,7 @@ async function loadLeaders() {
     const c = leaders.get(g.id);
     return !(c && (c.final || Date.now() - (c.at || 0) < sec('leaders') / 2));   // skip finals and just-fetched games
   });
-  if (state.view === 'home') renderHome();          // cached finals + scoreboard data, before the fetches finish
+  renderListing();                                   // cached finals + scoreboard data, before the fetches finish
   if (todo.length) setStatus(viewStatus(), 'Loading ' + todo.length + ' game' + (todo.length > 1 ? 's' : '') + '…');
   let failed = 0;
   await pool(todo, LEADER_CONCURRENCY, async g => {
@@ -1031,8 +1047,8 @@ async function loadLeaders() {
       if (box) ingestLeaders(g.id, box, st === 'post');
     } catch { failed++; }
   });
-  if (state.view === 'game' || date !== state.date) return;
-  if (state.view === 'home') renderHome(); else renderLeaders();
+  if (!listing() || date !== state.date) return;
+  renderListing();
   if (state.sbError) return;                         // keep the scoreboard error visible
   const anyLive = state.games.some(g => g.state === 'in'), pre = state.games.some(g => g.state === 'pre');
   const msg = !state.games.length ? 'No games on this day.'
@@ -1153,7 +1169,7 @@ function gameCard(g) {
 const CHOICES = {
   live: [5, 10, 20, 30, 60], box: [30, 60, 120, 300], others: [30, 60, 120, 300], leaders: [30, 60, 120, 300],
 };
-const SET_LABELS = { live: 'Watched live game', box: 'Its box score', others: 'Other games (scores)', leaders: 'Home & top performers' };
+const SET_LABELS = { live: 'Watched live game', box: 'Its box score', others: 'Other games (scores)', leaders: 'Game lists & top performers' };
 const fmtSec = n => (n < 60 ? n + 's' : n / 60 + ' min');
 const fmtB = b => (b < 1e3 ? Math.round(b) + ' B' : b < 1e6 ? Math.round(b / 1e3) + ' KB' : (b / 1e6).toFixed(b < 1e7 ? 1 : 0) + ' MB');
 
@@ -1213,8 +1229,8 @@ function renderUsage() {
   const box = $('#usage');
   const nLive = state.games.filter(g => g.state === 'in').length;
   const watching = state.view === 'game' && state.gameState === 'in';
-  const now = document.hidden ? 0 : state.view !== 'game' ? perMinute('leaders', nLive) : perMinute(watching ? 'game' : 'scores', nLive);
-  const nowWhat = state.view !== 'game' ? (state.view === 'home' ? 'Home page' : 'Top performers') + ' with ' + nLive + ' live game' + (nLive === 1 ? '' : 's')
+  const now = document.hidden ? 0 : listing() ? perMinute('leaders', nLive) : perMinute(watching ? 'game' : 'scores', nLive);
+  const nowWhat = listing() ? ({ home: 'Home page', leaders: 'Top performers', game: 'All games' })[state.view] + ' with ' + nLive + ' live game' + (nLive === 1 ? '' : 's')
     : watching ? 'Watching ' + (state.away?.abbr || '') + '–' + (state.home?.abbr || '') + ' live'
     : nLive ? 'Scores only (' + nLive + ' live game' + (nLive === 1 ? '' : 's') + ')' : 'No live games: nothing to refresh';
   const tbl = el('table'), th = el('tr');
@@ -1229,7 +1245,7 @@ function renderUsage() {
   };
   row('Right now', now, 'now', nowWhat);
   row('Watching one live game', perMinute('game', Math.max(1, nLive)));
-  row('Home or top performers, 5 live games', perMinute('leaders', 5));
+  row('Home, all games or top performers, 5 live games', perMinute('leaders', 5));
   tbl.append(thead, tb);
   const used = el('p', 'muted', 'Used this visit: ' + fmtB(usage.bytes) + ' in ' + usage.requests + ' request' + (usage.requests === 1 ? '' : 's') +
     ' · since ' + new Date(usage.total.since).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ': ' + fmtB(usage.total.bytes) + ' ');
@@ -1258,17 +1274,13 @@ function setView(v, load = true) {
   $('#gameView').hidden = v !== 'game';
   $('#leadersView').hidden = v !== 'leaders';
   $('#homeView').hidden = v !== 'home';
-  $('#games').hidden = v === 'home';                 // home shows every game as a card instead of the strip
   $('#navGame').setAttribute('aria-pressed', String(v === 'game'));
   $('#navLeaders').setAttribute('aria-pressed', String(v === 'leaders'));
   stop('pbp'); stop('ld');
-  writeHash(); renderGames(); measureHeader();
-  if (v === 'home') renderHome(); else if (v === 'leaders') renderLeaders();
+  syncMode(); writeHash(); renderGames();
+  renderListing();
   if (!load) return;
-  if (v === 'game') {
-    if (state.gameId) loadPBP();
-    else { const pick = defaultGame(); if (pick) selectGame(pick.id); }
-  } else loadLeaders();
+  if (listing()) loadLeaders(); else loadPBP();
 }
 
 function setTab(t) {
@@ -1311,11 +1323,11 @@ async function applyHash(initial) {
     setView(h.view, false);
     if (h.view === 'game' && h.g) loadPBP();
     await loadScoreboard();
-    if (h.view !== 'game') loadLeaders();
+    if (listing()) loadLeaders();
     return;
   }
   if (h.view === 'game' && h.g && h.g !== state.gameId) { setView('game', false); selectGame(h.g); }
-  else setView(h.view);
+  else { if (h.view === 'game' && !h.g && state.gameId) clearGame(); setView(h.view); }
 }
 
 function measureHeader() { document.documentElement.style.setProperty('--hh', $('header').offsetHeight + 'px'); }
@@ -1328,7 +1340,7 @@ async function changeDate(date) {
   clearGame(state.view === 'game' ? 'Loading…' : '');
   $('#leaders').replaceChildren();
   await loadScoreboard();
-  if (state.view !== 'game') loadLeaders();
+  if (listing()) loadLeaders();
 }
 function shiftDay(n) {
   const base = new Date((state.dayDate || ymd(new Date()).replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3')) + 'T12:00:00');
@@ -1342,7 +1354,8 @@ $('#next').onclick = () => shiftDay(1);
 $('#today').onclick = () => changeDate(null);
 $('#logo').onclick = e => { e.preventDefault(); go('home'); };
 $('#allLeaders').onclick = () => go('leaders');
-$('#navGame').onclick = () => go('game');
+// "Games" always shows the grid of all games, even from inside a game
+$('#navGame').onclick = () => { if (state.view === 'game' && !state.gameId) return; pushNav(); clearGame(); setView('game'); };
 $('#navLeaders').onclick = () => go('leaders');
 $('#tabs').querySelectorAll('button').forEach(b => (b.onclick = () => setTab(b.dataset.tab)));
 $('#period').onchange = e => { state.period = e.target.value; renderPlays(); };
@@ -1354,7 +1367,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) { Object.keys(timers).forEach(stop); return; }
   loadScoreboard();
   if (state.view === 'game' && state.gameId) loadPBP();
-  if (state.view !== 'game') loadLeaders();
+  if (listing()) loadLeaders();
 });
 
 // restore from the URL, e.g. #d=20261122&g=401704123&t=box  or  #v=leaders&d=20261122
