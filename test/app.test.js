@@ -667,3 +667,46 @@ test('home team is marked with "@" on the score header, box headings, strip, car
   const subs = app.$$('#homeLeaders .mu').map(m => m.textContent);
   assert.ok(subs.includes('ATL vs DET') && subs.includes('DET @ ATL'), subs.join(', '));
 });
+
+// ---------------------------------------------------------------- followed teams
+const firstTeams = (app, sel) => app.$$(sel).map(c => c.textContent.match(/[A-Z]{2,4}/)[0]);
+
+test('followed teams default to LAL, SA, PHI and are saved only when changed', async () => {
+  const app = await boot({ hash: '' });
+  await app.settle(() => /updated/.test(app.$('#homeStatus').textContent));
+  assert.deepEqual([...app.eval('settings.follow')], ['LAL', 'SA', 'PHI']);
+  app.$('#gear').click();
+  const on = app.$$('.follow .teams button').filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent);
+  assert.deepEqual(on, ['LAL', 'PHI', 'SA']);                          // shown in league order
+  assert.equal(app.$$('.follow .teams button').length, 30);
+  assert.equal(app.window.localStorage.getItem('nbapbp.settings'), null);
+});
+
+test('games with a followed team come first in the strip, home cards and games grid', async () => {
+  const app = await boot({ storage: { 'nbapbp.settings': { v: 2, follow: ['MIA', 'UTAH'] } } });
+  await app.settle(() => app.$$('#games .g').length === 7);
+  assert.deepEqual(firstTeams(app, '#games .g').slice(0, 3), ['OKC', 'DAL', 'DET']);   // OKC@MIA, DAL@UTAH, then the rest in order
+  app.$('#navGame').click();
+  await app.settle(() => app.$$('#gameList .gc').length === 7);
+  assert.deepEqual(firstTeams(app, '#gameList .gc .ls .ab').filter((_, i) => i % 2 === 0).slice(0, 3), ['OKC', 'DAL', 'DET']);
+  app.$('#logo').click();
+  assert.deepEqual(firstTeams(app, '#homeGames .gc .ls .ab').filter((_, i) => i % 2 === 0).slice(0, 2), ['OKC', 'DAL']);
+});
+
+test('followed players are highlighted on leaderboards; toggling a team updates order and highlight', async () => {
+  const app = await boot({ hash: '#v=leaders', storage: { 'nbapbp.settings': { v: 2, follow: ['MIA'] } } });
+  await app.settle(() => app.$$('#leaders .card').length === 12);
+  const fol = app.$$('#leaders li.fol');
+  assert.ok(fol.length > 0 && fol.every(li => /^MIA /.test(li.querySelector('.mu').textContent)));
+  assert.ok(app.$$('#leaders li:not(.fol)').every(li => !/^MIA /.test(li.querySelector('.mu').textContent)));
+  // follow ATL from the panel: its players light up and its game moves first in the strip
+  app.$('#gear').click();
+  app.$$('.follow .teams button').find(b => b.textContent === 'ATL').click();
+  assert.ok(app.$$('#leaders li.fol').some(li => /^ATL /.test(li.querySelector('.mu').textContent)));
+  assert.equal(firstTeams(app, '#games .g')[0], 'DET');                // DET@ATL (first by tip-off among followed games)
+  assert.deepEqual({ ...JSON.parse(app.window.localStorage.getItem('nbapbp.settings')) }, { v: 2, follow: ['MIA', 'ATL'] });
+  // unfollow everything: stored as an empty list, not reverted to the defaults
+  for (const t of ['MIA', 'ATL']) app.$$('.follow .teams button').find(b => b.textContent === t).click();
+  assert.equal(app.$$('#leaders li.fol').length, 0);
+  assert.deepEqual([...JSON.parse(app.window.localStorage.getItem('nbapbp.settings')).follow], []);
+});
