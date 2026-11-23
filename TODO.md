@@ -30,10 +30,24 @@ Kept for reference in case we ever use ESPN's season totals directly.
 | A player's game list | `sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2027/athletes/<id>/eventlog?limit=100` | ~0.7 KB; `played`, per-game `statistics` `$ref`. Includes preseason, tagged the same as regular season; no filter parameter works. |
 | A player's season stats (core) | `…/seasons/2027/types/2/athletes/<id>/statistics/0` | ~5 KB; same lag as `byathlete`. |
 
-- DET@ATL ended ≈ 22:53 UTC on 2026-11-22. The event log listed it as played (with stats) at the first check,
-  2¼ h later; OKC@MIA (final ≈ 01:31 UTC) was in the event log within 40 minutes.
-- Season `gamesPlayed` had **not** moved for any of the 18 DET@ATL players or 19 OKC@MIA players by 02:11 UTC
-  (3¼ h after DET@ATL ended). Alexander-Walker's season line was exactly his first 16 games (335 points);
+A monitor polled every 10 minutes from 01:11 to 03:01 UTC on 2026-11-23, recording for each of that night's games
+when it went final, whether one player's event log listed it, and how many of its players' season `gamesPlayed`
+(`byathlete`) had gone up:
+
+| Game | Final (first seen) | Event log lists it | Season `gamesPlayed` updated by 03:01 UTC |
+|---|---|---|---|
+| DET @ ATL | ≈ 22:53 UTC (before monitoring) | yes, at first check | 0 of 18 players (≈ 4 h after the final) |
+| OKC @ MIA | 01:31 | yes, same poll | 0 of 19 |
+| ORL @ WSH | 02:21 | yes, same poll | 0 of 25 |
+| DAL @ UTAH | 02:31 | yes, same poll | 0 of 22 |
+| DEN @ CHI | 02:41 | yes, same poll | 0 of 20 |
+
+- **Event log: updates within ~10 minutes of a final** (already listed at the first poll after each game ended).
+- **Season totals: no per-game updates.** None of 104 players moved, over spans of 20 minutes to about 4 hours
+  after their game ended. This points to a batch, most likely overnight; when it runs wasn't observed (the
+  monitor stopped at 03:01 UTC). Alexander-Walker's season line was exactly his first 16 games (335 points);
   with this game it would be 17 games / 362.
 - To tell whether a game is counted: season `gamesPlayed` vs regular-season games played in the event log (needs
-  the team's regular-season schedule to drop preseason). Per-game vs nightly batch updates: not determined.
+  the team's regular-season schedule to drop preseason). To pin down the batch time, poll `byathlete` for one
+  player from a late game every 30 minutes from 03:00 to 12:00 UTC.
+- None of this affects the Season tab, which uses our own nightly data.
