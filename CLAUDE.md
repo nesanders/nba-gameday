@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Static NBA live dashboard served by GitHub Pages at https://nsanders.me/nba-gameday (a project site under the owner's user-site domain, so all paths must stay relative). Everything ships in **one file, `index.html`**: vanilla JS/CSS, no build step, no runtime dependencies, no images (favicon is an inline SVG data URI). Keep it that way unless the owner agrees otherwise. `package.json`/`node_modules` exist only for tests.
+Static NBA live dashboard served by GitHub Pages at https://nsanders.me/nba-gameday (a project site under the owner's user-site domain, so all paths must stay relative). There is deliberately no `CNAME` file: the custom domain belongs to the owner's user-site repo. Everything ships in **one file, `index.html`**: vanilla JS/CSS, no build step, no runtime dependencies, no images (favicon is an inline SVG data URI). Keep it that way unless the owner agrees otherwise. `package.json`/`node_modules` exist only for tests.
 
 ## Layout
 - `index.html` – the whole app. Script sections: fetching (+ byte counting) → box score parsing + advanced stats (`buildBox`, Basketball-Reference formulas) → scoreboard → game view / live loop (`loadPBP`, `tickFull`, `tickLite`, `nextDelay`) → plays → box rendering → top performers → settings + data usage → views/routing.
@@ -38,3 +38,6 @@ Run tests: `npm test`.
 
 ## Box score column widths
 `COLS[].w` (em) are fixed so both team tables align and scroll together. They were sized from the widest header/value measured in Chromium across real games; re-measure if you add columns or change the font.
+
+## Box score sorting
+Every column header (including Player, by last name) sorts both team tables together; click again to reverse. Default `state.sort` is `GS` (starter) descending with Game Score as the tie-breaker, i.e. starters first, each group by GmSc. Blank values (e.g. FG% with no attempts) always sort last. Made-attempted columns sort by makes, then attempts. The sort is not persisted: every visit starts from the default.

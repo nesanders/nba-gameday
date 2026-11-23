@@ -380,6 +380,79 @@ test('a later scoreboard response does not overwrite the watched game tile with 
   assert.match(tile.textContent, /38.*41/);
 });
 
+// ---------------------------------------------------------------- box score sorting
+const colIdx = (app, h) => Array.from(app.$$('table.bx')[0].querySelectorAll('thead th')).findIndex(t => t.textContent === h);
+const colVals = (app, h, t = 0) => Array.from(app.$$('table.bx')[t].querySelectorAll('tbody tr'))
+  .map(tr => tr.children[colIdx(app, h)].textContent);
+const clickHead = (app, h) => Array.from(app.$$('table.bx')[0].querySelectorAll('thead th')).find(t => t.textContent === h).click();
+
+test('box default sort: starters first (GS column), then Game Score descending', async () => {
+  const app = await boot({ hash: '#g=401910029' });
+  await app.settle(() => app.$$('table.bx').length === 2);
+  for (const t of [0, 1]) {
+    const gs = colVals(app, 'GS', t), gm = colVals(app, 'GmSc', t).map(Number);
+    assert.equal(gs.filter(x => x === '●').length, 5);
+    assert.deepEqual(gs, [...gs].sort().reverse(), 'starters first');
+    const starters = gm.slice(0, 5), bench = gm.slice(5);
+    assert.deepEqual(starters, [...starters].sort((a, b) => b - a));
+    assert.deepEqual(bench, [...bench].sort((a, b) => b - a));
+    assert.equal(app.$$('table.bx')[t].querySelectorAll('tbody tr')[5].className, 'b0');   // starter/bench divider
+  }
+  assert.equal(app.$('table.bx th[aria-sort]').textContent, 'GS');
+});
+
+test('every column sorts on click: desc, then asc; both tables follow; blanks last', async () => {
+  const app = await boot({ hash: '#g=401910029' });
+  await app.settle(() => app.$$('table.bx').length === 2);
+  const heads = Array.from(app.$$('table.bx')[0].querySelectorAll('thead th')).map(t => t.textContent);
+  assert.equal(heads.length, 33);
+  for (const h of heads.filter(h => h !== 'Player' && h !== 'GS')) {
+    clickHead(app, h);
+    const key = v => (v === '' ? null : parseFloat(v));
+    for (const t of [0, 1]) {
+      const vals = colVals(app, h, t).map(key), nums = vals.filter(v => v != null);
+      assert.deepEqual(nums, [...nums].sort((a, b) => b - a), h + ' desc');
+      assert.ok(vals.indexOf(null) < 0 || vals.slice(vals.indexOf(null)).every(v => v == null), h + ' blanks last');
+    }
+    assert.equal(app.$('table.bx th[aria-sort]').getAttribute('aria-sort'), 'descending');
+    clickHead(app, h);
+    const asc = colVals(app, h).map(key).filter(v => v != null);
+    assert.deepEqual(asc, [...asc].sort((a, b) => a - b), h + ' asc');
+    assert.equal(app.$('table.bx th[aria-sort]').getAttribute('aria-sort'), 'ascending');
+  }
+  clickHead(app, 'Player');
+  const names = colVals(app, 'Player').map(n => n.replace(/\s*[A-Z]{1,2}$/, '').split(' ').slice(1).join(' '));
+  assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b)));
+  assert.equal(app.$$('table.bx tbody tr.b0').length, 0, 'no starter divider unless sorted by GS');
+  // FG sorts by makes, then attempts
+  clickHead(app, 'FG');
+  const fg = colVals(app, 'FG').map(v => v.split('-').map(Number));
+  for (let i = 1; i < fg.length; i++) assert.ok(fg[i - 1][0] > fg[i][0] || (fg[i - 1][0] === fg[i][0] && fg[i - 1][1] >= fg[i][1]));
+  // team totals row stays in the footer
+  assert.equal(app.$$('table.bx tfoot td')[0].textContent, 'Team');
+});
+
+test('sort is keyboard accessible and survives live refreshes', async () => {
+  const app = await boot();
+  await app.settle(() => app.$$('table.bx').length === 2);
+  const th = Array.from(app.$$('table.bx')[0].querySelectorAll('thead th')).find(t => t.textContent === 'PTS');
+  th.dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.equal(app.$('table.bx th[aria-sort]').textContent, 'PTS');
+  assert.equal(app.document.activeElement.textContent, 'PTS');
+  app.eval('renderBox()');                                    // what each box refresh does
+  assert.equal(app.$('table.bx th[aria-sort]').textContent, 'PTS');
+});
+
+test('settings panel has a title and a working close button', async () => {
+  const app = await boot();
+  await app.settle(() => /^Live/.test(app.$('#status').textContent));
+  app.$('#gear').click();
+  assert.match(app.$('#settings h2').textContent, /Refresh speed/);
+  app.$('#setClose').click();
+  assert.equal(app.$('#settings').hidden, true);
+  assert.equal(app.$('#gear').getAttribute('aria-expanded'), 'false');
+});
+
 test('usage counters accumulate and persist', async () => {
   const app = await boot();
   await app.settle(() => app.eval('usage.requests') >= 2);

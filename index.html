@@ -37,7 +37,10 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .g.live .s{color:var(--live);font-weight:600}
 .g[aria-current=true]{outline:2px solid var(--accent);outline-offset:-1px}
 /* settings panel */
-#settings{border-top:1px solid var(--line);padding:.5rem 0 .6rem;max-height:70vh;overflow-y:auto;font-size:13px}
+#settings{margin:.1rem 0 .6rem;padding:.55rem .75rem .7rem;max-height:70vh;overflow-y:auto;font-size:13px;background:var(--card);border:1px solid var(--muted);border-top:3px solid var(--accent);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+#settings .sethead{display:flex;align-items:center;justify-content:space-between;margin:0 0 .45rem}
+#settings .sethead h2{font-size:13px;margin:0}
+#settings select,#settings button{background:var(--bg)}
 .setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.35rem .9rem;align-items:center}
 .setgrid label{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
 .setgrid label.ck{justify-content:flex-start}
@@ -102,6 +105,11 @@ ul{list-style:none;margin:0;padding:0}
 table{border-collapse:separate;border-spacing:0;font-size:12.5px;font-variant-numeric:tabular-nums}
 th,td{padding:.18rem .3rem;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
 th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
+.bx thead th{cursor:pointer;user-select:none}
+.bx thead th:hover{color:var(--fg)}
+.bx thead th[aria-sort]{color:var(--accent);box-shadow:inset 0 -2px var(--accent)}
+.bx thead th:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.bx td.gs{color:var(--muted);text-align:center}
 .bx{table-layout:fixed}
 .bx td,.bx th{overflow:hidden;text-overflow:ellipsis}
 .bx th:first-child,.bx td:first-child,.ff th:first-child,.ff td:first-child{position:sticky;left:0;z-index:1;text-align:left;background:var(--bg)}
@@ -149,7 +157,8 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
       <button id="today" hidden>Today</button>
       <button id="gear" aria-label="Settings" aria-expanded="false" aria-controls="settings" title="Refresh speed &amp; data usage">⚙</button>
     </div>
-    <div id="settings" hidden>
+    <div id="settings" hidden role="region" aria-label="Refresh speed and data usage">
+      <div class="sethead"><h2>Refresh speed &amp; data usage</h2><button id="setClose" aria-label="Close settings">✕</button></div>
       <div class="setgrid" id="setControls"></div>
       <div id="usage"></div>
     </div>
@@ -179,7 +188,7 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
       </div>
       <div id="boxPane">
         <div class="boxbar"><span class="muted">Top:</span><span id="topSel" class="seg"></span><span class="muted" id="boxAge"></span>
-          <span class="muted" style="margin-left:auto">Hover/tap headers for definitions · names → Basketball Reference</span></div>
+          <span class="muted" style="margin-left:auto">Click a header to sort · hover for definitions · names → Basketball Reference</span></div>
         <div id="box"></div>
       </div>
     </div>
@@ -226,6 +235,7 @@ const state = {
   plays: [], filter: 'all', period: 'all', newest: true,
   box: null,
   top: store.get('nbapbp.top'),   // team abbreviation the user wants on top
+  sort: { key: 'GS', dir: -1 },    // box score sort { key: column header, dir: 1 asc | -1 desc }: starters, then GmSc
 };
 const timers = { sb: 0, pbp: 0, ld: 0 };
 const due = {};                   // timer key -> { fn, at } for pending timers, so a settings change can re-time them
@@ -692,6 +702,7 @@ const sg = v => (v == null ? '' : v > 0 ? '+' + v : String(v));
 // w = column width in em (fixed so both team tables line up and scroll together).
 // Sized from the widest header/value measured in Chromium across real games (incl. padding).
 const COLS = [
+  { h: 'GS', t: 'Started the game', w: 2.4, v: r => (r.starter ? '●' : ''), s: r => (r.starter ? 1 : 0), cls: 'gs' },
   { h: 'MIN', t: 'Minutes played', w: 3, v: r => f0(r.min) },
   { h: 'PTS', t: 'Points', w: 3, v: r => r.pts, k: 1 },
   { h: 'REB', t: 'Total rebounds', w: 3, v: r => r.reb },
@@ -699,9 +710,9 @@ const COLS = [
   { h: 'STL', t: 'Steals', w: 2.9, v: r => r.stl },
   { h: 'BLK', t: 'Blocks', w: 3, v: r => r.blk },
   { h: 'TO', t: 'Turnovers', w: 2.4, v: r => r.tov },
-  { h: 'FG', t: 'Field goals made-attempted', w: 4.3, v: r => r.fgm + '-' + r.fga },
-  { h: '3P', t: '3-pointers made-attempted', w: 4.3, v: r => r.tpm + '-' + r.tpa },
-  { h: 'FT', t: 'Free throws made-attempted', w: 4.3, v: r => r.ftm + '-' + r.fta },
+  { h: 'FG', t: 'Field goals made-attempted', w: 4.3, v: r => r.fgm + '-' + r.fga, s: r => r.fgm + r.fga / 1000 },
+  { h: '3P', t: '3-pointers made-attempted', w: 4.3, v: r => r.tpm + '-' + r.tpa, s: r => r.tpm + r.tpa / 1000 },
+  { h: 'FT', t: 'Free throws made-attempted', w: 4.3, v: r => r.ftm + '-' + r.fta, s: r => r.ftm + r.fta / 1000 },
   { h: 'OREB', t: 'Offensive rebounds', w: 3.7, v: r => r.orb },
   { h: 'DREB', t: 'Defensive rebounds', w: 3.7, v: r => r.drb },
   { h: 'PF', t: 'Personal fouls', w: 2.3, v: r => r.pf },
@@ -789,6 +800,44 @@ function teamSummary(order) {
   return wrap;
 }
 
+// Box score sort, shared by both team tables. Default: starters first, then Game Score.
+const sortVal = (c, r) => {                       // numeric sort value, or null (always sorted last)
+  const v = c.s ? c.s(r) : c.v(r);
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+};
+const lastName = p => p.name.split(' ').slice(1).join(' ') || p.name;
+function sortPlayers(ps) {
+  const { key, dir } = state.sort;
+  const col = COLS.find(c => c.h === key);
+  const gmsc = p => p.a?.gmsc ?? -Infinity;
+  return ps.slice().sort((a, b) => {
+    if (!col) return dir * lastName(a).localeCompare(lastName(b));
+    const x = sortVal(col, a), y = sortVal(col, b);
+    if (x !== y) {
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return dir * (x - y);
+    }
+    return gmsc(b) - gmsc(a);                       // ties: higher Game Score first
+  });
+}
+function setSort(key) {
+  state.sort = state.sort.key === key ? { key, dir: -state.sort.dir } : { key, dir: key === 'Player' ? 1 : -1 };
+  renderBox();
+  const th = [...$('#box').querySelectorAll('.bx thead th')].find(t => t.dataset.k === key);   // keep keyboard focus
+  if (th) th.focus();
+}
+function sortHeader(label, key, cls, title) {
+  const th = el('th', cls, label);
+  th.dataset.k = key; th.tabIndex = 0;
+  th.title = (title ? title + ' · ' : '') + 'click to sort';
+  if (state.sort.key === key) th.setAttribute('aria-sort', state.sort.dir > 0 ? 'ascending' : 'descending');
+  th.onclick = () => setSort(key);
+  th.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSort(key); } };
+  return th;
+}
+
 function teamTable(T) {
   const head = el('div', 'th');
   head.dataset.team = T.id;
@@ -806,22 +855,22 @@ function teamTable(T) {
   tbl.style.width = (NAME_W + COLS.reduce((s, c) => s + c.w, 0)) + 'em';
 
   const hr = el('tr');
-  hr.append(el('th', null, 'Player'));
-  COLS.forEach(c => { const th = el('th', c.a0 ? 'a0' : null, c.h); th.title = c.t; hr.append(th); });
+  hr.append(sortHeader('Player', 'Player', null, 'Player (sorts by last name)'));
+  COLS.forEach(c => hr.append(sortHeader(c.h, c.h, c.a0 ? 'a0' : null, c.t)));
   const thead = el('thead'); thead.append(hr);
 
   const tbody = el('tbody');
-  const played = T.players.filter(p => !p.dnp);
-  const starters = played.filter(p => p.starter), bench = played.filter(p => !p.starter);
-  [...starters, ...bench].forEach((p, i) => {
-    const tr = el('tr', starters.length && i === starters.length ? 'b0' : null);
+  const rows = sortPlayers(T.players.filter(p => !p.dnp));
+  rows.forEach((p, i) => {
+    // a divider between starters and bench when sorted by starter
+    const tr = el('tr', state.sort.key === 'GS' && i > 0 && rows[i - 1].starter !== p.starter ? 'b0' : null);
     const td = el('td');
     const a = el('a', null, p.short);
     a.href = bbref(p.name); a.target = '_blank'; a.rel = 'noopener noreferrer';
     a.title = p.name + ' on Basketball Reference';
     td.append(a, el('span', 'pos', p.pos));
     tr.append(td);
-    COLS.forEach(c => tr.append(el('td', (c.a0 ? 'a0' : '') + (c.k ? ' k' : ''), String(c.v(p)))));
+    COLS.forEach(c => tr.append(el('td', [c.a0 && 'a0', c.k && 'k', c.cls].filter(Boolean).join(' ') || null, String(c.v(p)))));
     tbody.append(tr);
   });
   const tfoot = el('tfoot'), fr = el('tr');
@@ -1050,6 +1099,7 @@ function renderUsage() {
   box.replaceChildren(tbl, el('p', 'muted', '*A live game lasts about 2¼ hours. Estimates are upper bounds: polling slows during breaks. Compressed sizes, excluding this page itself (~18 KB, downloaded once).'), used);
 }
 
+$('#setClose').onclick = () => $('#gear').click();
 $('#gear').onclick = () => {
   const open = $('#settings').hidden;
   $('#settings').hidden = !open;
