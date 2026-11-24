@@ -51,6 +51,7 @@ Run tests: `npm test`.
 - Team-only turnovers (shot clock etc.) are only in `boxscore.teams[].statistics` (`teamTurnovers`/`totalTurnovers`); they're added into possessions, team TOV% and the USG% denominator.
 - Box score stats are mapped by label (`MIN, PTS, FG, 3PT, FT, REB, AST, TO, STL, BLK, OREB, DREB, PF, +/-`) with `keys` as a fallback, because column order has changed before.
 - Pre-game scoreboard scores are `'0'`; the UI hides scores by `state === 'pre'`.
+- Records and broadcasts come with calls we already make. Records: scoreboard competitor `records[0]` (overall) or summary header competitor `record` (`type: 'total'`). Broadcasts: scoreboard `competitions[0].geoBroadcasts` and summary header `competitions[0].broadcasts` share one shape (`type.shortName` TV/Streaming, `market.type` National/Home/Away, `media.shortName`); `castText()` shows national networks only if any, else each team's local TV (streaming if no TV). Some games list none. Broadcasts are hidden once a game is final.
 - The scoreboard can be older than the watched game's last refresh; `loadScoreboard` keeps the watched game's fresher score on its tile.
 
 ## Box score column widths

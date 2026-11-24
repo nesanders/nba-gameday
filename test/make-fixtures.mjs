@@ -11,7 +11,10 @@ const OUT = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const pick = (o, keys) => (o == null ? o : Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]])));
 const team = t => pick(t, ['id', 'abbreviation', 'displayName', 'shortDisplayName', 'name', 'color', 'alternateColor']);
 const status = s => s && { ...pick(s, ['displayClock', 'period']), type: pick(s.type, ['name', 'state', 'completed', 'detail', 'shortDetail']) };
+// broadcasts: scoreboard `geoBroadcasts` and summary header `broadcasts` share this shape
+const casts = list => list && list.map(b => ({ type: pick(b.type, ['shortName']), market: pick(b.market, ['type']), media: pick(b.media, ['shortName']) }));
 const competitor = c => ({ ...pick(c, ['id', 'homeAway', 'score', 'winner']), team: team(c.team),
+  ...(c.record ? { record: c.record.map(r => pick(r, ['type', 'summary'])) } : {}),
   ...(c.linescores ? { linescores: c.linescores.map(l => pick(l, ['displayValue', 'value', 'period'])) } : {}),
   ...(c.records ? { records: c.records.slice(0, 1).map(r => pick(r, ['name', 'summary'])) } : {}),
   ...(c.leaders ? { leaders: c.leaders.map(L => ({ name: L.name, leaders: L.leaders.slice(0, 1).map(l => ({
@@ -19,13 +22,15 @@ const competitor = c => ({ ...pick(c, ['id', 'homeAway', 'score', 'winner']), te
 
 function scoreboard(d) {
   return { day: d.day, events: d.events.map(e => ({ ...pick(e, ['id', 'date', 'shortName']), status: status(e.status),
-    competitions: e.competitions.map(c => ({ competitors: c.competitors.map(competitor), status: status(c.status) })) })) };
+    competitions: e.competitions.map(c => ({ competitors: c.competitors.map(competitor), status: status(c.status),
+      ...(c.geoBroadcasts ? { geoBroadcasts: casts(c.geoBroadcasts) } : {}) })) })) };
 }
 
 function summary(d) {
   const b = d.boxscore || {};
   return {
-    header: { competitions: d.header.competitions.map(c => ({ competitors: c.competitors.map(competitor), status: status(c.status) })) },
+    header: { competitions: d.header.competitions.map(c => ({ competitors: c.competitors.map(competitor), status: status(c.status),
+      ...(c.broadcasts ? { broadcasts: casts(c.broadcasts) } : {}) })) },
     boxscore: {
       teams: (b.teams || []).map(t => ({ homeAway: t.homeAway, team: team(t.team), statistics: t.statistics.map(s => pick(s, ['name', 'displayValue'])) })),
       players: (b.players || []).map(tp => ({ team: team(tp.team), statistics: tp.statistics.map(s => ({

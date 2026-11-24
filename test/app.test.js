@@ -789,3 +789,45 @@ test('date picker: the date label opens a calendar; picking a day loads it; pick
   app.window.history.back();                                           // each pick is a Back step
   await app.settle(() => /d=20261105/.test(app.window.location.hash) && app.$('#day').textContent !== 'Today');
 });
+
+// ---------------------------------------------------------------- records and broadcasts (same API calls)
+test('broadcast line: national only if any; else each team’s TV, streaming only without TV', async () => {
+  const app = await boot({ hash: '' });
+  await app.settle(() => app.$$('#homeGames .gc').length === 7);
+  const cast = app.eval('castText'), b = (type, market, name) => ({ type: { shortName: type }, market: { type: market }, media: { shortName: name } });
+  const UTAH = { abbr: 'UTAH' }, LAL = { abbr: 'LAL' };
+  // real 2026-11-23 UTAH @ LAL listing
+  const utahLal = [b('TV', 'National', 'NBA TV'), b('TV', 'Home', 'Spectrum Sports Net'), b('Streaming', 'Home', 'Spectrum Sports Net +'), b('TV', 'Away', 'KJZZ-TV'), b('Streaming', 'Away', 'Jazz+')];
+  assert.equal(cast(utahLal, UTAH, LAL), 'NBA TV');
+  assert.equal(cast(utahLal.slice(1), UTAH, LAL), 'UTAH: KJZZ-TV · LAL: Spectrum Sports Net');
+  assert.equal(cast([b('Streaming', 'Away', 'DAZN SAS')], { abbr: 'SA' }, { abbr: 'SAC' }), 'SA: DAZN SAS');
+  assert.equal(cast([], UTAH, LAL), '');
+  assert.equal(cast(undefined, UTAH, LAL), '');
+});
+
+test('game cards show the broadcast for upcoming and live games (real scoreboard data)', async () => {
+  const app = await boot({ hash: '#v=game' });
+  await app.settle(() => app.$$('#gameList .gc').length === 7);
+  const st = Object.fromEntries(app.$$('#gameList .gc').map(c => [c.querySelector('.ls .ab').textContent, c.querySelector('.st')]));
+  assert.equal(st.OKC.querySelector('.bc').textContent, ' · OKC: KSBI');                   // live; streaming app dropped
+  assert.equal(st.DAL.querySelector('.bc').textContent, ' · DAL: KFAA-TV · UTAH: KJZZ-TV');
+  assert.equal(st.IND.querySelector('.bc').textContent, ' · IND: DAZN IND');               // upcoming, streaming only
+  assert.equal(st.DET.querySelector('.bc'), null, 'final games: no broadcast');
+  assert.equal(st.BOS.querySelector('.bc'), null, 'no broadcast listed by ESPN');
+  assert.match(st.OKC.textContent, /^● 10:04 - 3rd · OKC: KSBI$/);
+});
+
+test('game page shows each team’s record and the broadcast from the game summary', async () => {
+  const app = await boot();                                            // OKC @ MIA, live
+  await app.settle(() => /^Live/.test(app.$('#status').textContent));
+  const header = fixture('summary-401910030').header.competitions[0];
+  const rec = Object.fromEntries(header.competitors.map(c => [c.team.abbreviation, c.record.find(r => r.type === 'total').summary]));
+  const sides = app.$$('#score .tm');
+  assert.deepEqual(sides.map(s => [s.querySelector('.ab').textContent, s.querySelector('.rec').textContent]), [['OKC', rec.OKC], ['MIA', rec.MIA]]);
+  assert.equal(app.$('#score .mid .bc').textContent, 'OKC: KSBI');
+  // a finished game keeps the records but drops the broadcast
+  const fin = await boot({ hash: '#g=401910029' });
+  await fin.settle(() => fin.$('#status').textContent === 'Final.');
+  assert.equal(fin.$$('#score .rec').length, 2);
+  assert.equal(fin.$('#score .mid .bc'), null);
+});

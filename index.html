@@ -76,6 +76,8 @@ main{padding-top:.6rem;padding-bottom:1.5rem}
 #score .pts{font-size:1.7rem;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
 #score .mid{font-size:13px;color:var(--muted)}
 #score .mid.live{color:var(--live);font-weight:600}
+#score .mid .bc{font-size:11px;color:var(--muted);font-weight:400;margin-top:.1rem}
+#score .rec{font-variant-numeric:tabular-nums;font-size:11px}
 
 /* game view layout: tabs on mobile, side by side on desktop */
 #tabs{margin:.5rem 0 0}
@@ -146,6 +148,7 @@ th{font-weight:600;color:var(--muted);background:var(--card);cursor:help}
 .gc{border:1px solid var(--line);border-radius:10px;padding:.45rem .6rem .5rem;cursor:pointer;font-size:13px;min-width:0}
 .gc:hover,.gc:focus-visible{border-color:var(--accent);outline:none}
 .gc .st{font-size:11.5px;color:var(--muted);margin-bottom:.15rem}
+.gc .st .bc{color:var(--muted);font-weight:400}
 .gc.live .st{color:var(--live);font-weight:600}
 .gc table.ls{width:100%;font-size:12.5px}
 .ls th,.ls td{padding:.12rem .3rem;background:none;cursor:inherit}
@@ -338,7 +341,7 @@ const state = {
   date: null,        // YYYYMMDD; null = ESPN's "today"
   dayDate: null,     // YYYY-MM-DD reported by ESPN
   games: [],
-  gameId: null, gameState: null, statusName: '', clock: '', detail: '', sbError: false,
+  gameId: null, gameState: null, statusName: '', clock: '', detail: '', sbError: false, broadcast: '',
   away: null, home: null,
   plays: [], filter: 'all', period: 'all', newest: true,
   box: null,
@@ -386,7 +389,7 @@ function team(c) {
   return { id: String(t.id), abbr: t.abbreviation || '?', name: t.shortDisplayName || t.name || t.displayName || '',
     color: t.color ? '#' + t.color : null, score: c.score ?? '', homeAway: c.homeAway,
     lines: (c.linescores || []).map(l => l.displayValue ?? String(l.value ?? '')),
-    record: c.records?.[0]?.summary || '',
+    record: c.records?.[0]?.summary || c.record?.find?.(r => r.type === 'total')?.summary || '',
     winner: c.winner === true,
     // scoreboard only: each team's points/rebounds/assists leader (used on home cards until box data loads)
     leaders: (c.leaders || []).filter(L => ['points', 'rebounds', 'assists'].includes(L.name) && L.leaders?.[0])
@@ -399,12 +402,26 @@ function homeMark(t, spacer) {
   return spacer ? el('span', 'hm') : document.createTextNode('');
 }
 
+// Broadcast line: national networks only if there are any, else each team's local TV (streaming if it has no TV).
+function castText(list, away, home) {
+  if (!list?.length) return '';
+  const names = (market, type) => [...new Set(list.filter(b => b.market?.type === market && (!type || b.type?.shortName === type))
+    .map(b => b.media?.shortName).filter(Boolean))];
+  const national = names('National');
+  if (national.length) return national.join(' · ');
+  return [[away, 'Away'], [home, 'Home']].map(([t, m]) => {
+    const tv = names(m, 'TV'), all = tv.length ? tv : names(m);
+    return all.length ? (t?.abbr || m) + ': ' + all.join(', ') : '';
+  }).filter(Boolean).join(' · ');
+}
+
 function parseEvent(e) {
   const comp = e.competitions?.[0] || {};
   const cs = (comp.competitors || []).map(team);
   const st = e.status?.type || comp.status?.type || {};
-  return { id: String(e.id), away: cs.find(c => c.homeAway === 'away') || cs[0], home: cs.find(c => c.homeAway === 'home') || cs[1],
-    state: st.state, detail: st.shortDetail || st.detail || '' };
+  const away = cs.find(c => c.homeAway === 'away') || cs[0], home = cs.find(c => c.homeAway === 'home') || cs[1];
+  return { id: String(e.id), away, home, state: st.state, detail: st.shortDetail || st.detail || '',
+    broadcast: castText(comp.geoBroadcasts, away, home) };
 }
 
 // ---------------------------------------------------------------- box score parsing + advanced stats
@@ -612,6 +629,7 @@ function selectGame(id) {
   $('#box').replaceChildren(); $('#topSel').replaceChildren();
   writeHash(); renderGames();
   const g = state.games.find(x => x.id === id);
+  state.broadcast = g?.broadcast || '';
   if (g) { state.away = g.away; state.home = g.home; state.gameState = g.state; renderScore(g.detail); }
   if (state.view === 'game') { setStatus('#status', 'Loading…'); loadPBP(); }
 }
@@ -671,6 +689,7 @@ async function tickFull(id) {
   const cs = (comp.competitors || []).map(team);
   state.away = cs.find(c => c.homeAway === 'away') || state.away;
   state.home = cs.find(c => c.homeAway === 'home') || state.home;
+  state.broadcast = castText(comp.broadcasts, state.away, state.home) || state.broadcast;
   applyStatus(comp.status);
   renderScore(state.detail);
   renderFilters();
@@ -743,11 +762,14 @@ function renderScore(detail) {
     if (t.color) ab.style.setProperty('--c', t.color);
     const who = el('span');
     who.append(homeMark(t), ab);
-    const parts = [who, el('span', 'nm', t.name), el('span', 'pts', gameState === 'pre' ? '–' : t.score)];
+    const nm = el('span', 'nm', t.name);
+    if (t.record) { const r = el('span', 'rec', t.record); r.title = 'Record'; nm.append(' ', r); }
+    const parts = [who, nm, el('span', 'pts', gameState === 'pre' ? '–' : t.score)];
     d.append(...(rev ? parts.reverse() : parts));
     return d;
   };
   const mid = el('div', 'mid' + (gameState === 'in' ? ' live' : ''), (gameState === 'in' ? '● ' : '') + detail);
+  if (state.broadcast && gameState !== 'post') { const b = el('div', 'bc', state.broadcast); b.title = 'Broadcast'; mid.append(b); }
   box.replaceChildren(side(away, false), mid, side(home, true));
   box.hidden = false;
 }
@@ -1201,7 +1223,9 @@ function gameCard(g) {
   card.setAttribute('aria-label', (g.away?.name || g.away?.abbr) + ' at ' + (g.home?.name || g.home?.abbr) + ', ' + g.detail);
   card.onclick = e => { if (!e.target.closest('a')) openGame(g.id); };
   card.onkeydown = e => { if (e.key === 'Enter' && e.target === card) openGame(g.id); };
-  card.append(el('div', 'st', (g.state === 'in' ? '● ' : '') + g.detail));
+  const st = el('div', 'st', (g.state === 'in' ? '● ' : '') + g.detail);
+  if (g.broadcast && g.state !== 'post') { const b = el('span', 'bc', ' · ' + g.broadcast); b.title = 'Broadcast'; st.append(b); }
+  card.append(st);
 
   const teams = [g.away, g.home].filter(Boolean);
   const started = g.state !== 'pre';
