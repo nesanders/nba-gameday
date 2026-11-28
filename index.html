@@ -30,6 +30,9 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .bar h1{font-size:1rem;margin:0;white-space:nowrap}
 .bar h1 a:hover{text-decoration:none}
 .bar .sp{flex:1}
+.datenav{display:inline-flex;align-items:center;gap:.4rem;flex-wrap:nowrap;margin-left:auto}
+/* phones: ⚙ stays on the first line; the date group wraps as a unit, right-aligned */
+@media (max-width:520px){.bar #gear{order:1}.bar .datenav{order:2;gap:.2rem}}
 .bar .sm{display:none}
 #day{font-variant-numeric:tabular-nums;min-width:6.2em;text-align:center;color:var(--muted);background:none;border-color:transparent}
 #day:hover,#day:focus-visible{border-color:var(--line);color:var(--fg)}
@@ -71,6 +74,13 @@ main{padding-top:.6rem;padding-bottom:1.5rem}
 /* score header */
 #score{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem;padding:.55rem;background:var(--card);border-radius:10px;text-align:center}
 #score .tm{display:flex;align-items:baseline;justify-content:center;gap:.5rem;flex-wrap:wrap}
+/* phones: both sides stack the same way (the home side is built in reverse order, so use `order`) */
+@media (max-width:600px){
+  #score{align-items:start}
+  #score .tm{flex-direction:column;align-items:center;flex-wrap:nowrap;gap:.1rem}
+  #score .who{order:1}#score .nm{order:2}#score .pts{order:3}
+  #score .mid{align-self:center}
+}
 #score .ab{font-weight:700;border-bottom:3px solid var(--c,transparent)}
 #score .nm{font-size:12px;color:var(--muted)}
 #score .pts{font-size:1.7rem;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
@@ -219,10 +229,12 @@ footer{font-size:11px;color:var(--muted);text-align:center;padding:.5rem 0 1.5re
         <button id="navSeason" aria-pressed="false">Season</button>
       </span>
       <span class="sp"></span>
-      <button id="prev" aria-label="Previous day">‹</button>
-      <span class="daywrap"><button id="day" aria-label="Choose a date" title="Choose a date">Today</button><input type="date" id="dayPick" tabindex="-1" aria-hidden="true"></span>
-      <button id="next" aria-label="Next day">›</button>
-      <button id="today" hidden>Today</button>
+      <span class="datenav">
+        <button id="prev" aria-label="Previous day">‹</button>
+        <span class="daywrap"><button id="day" aria-label="Choose a date" title="Choose a date">Today</button><input type="date" id="dayPick" tabindex="-1" aria-hidden="true"></span>
+        <button id="next" aria-label="Next day">›</button>
+        <button id="today" hidden>Today</button>
+      </span>
       <button id="gear" aria-label="Settings" aria-expanded="false" aria-controls="settings" title="Refresh speed &amp; data usage">⚙</button>
     </div>
     <div id="settings" hidden role="region" aria-label="Refresh speed and data usage">
@@ -760,7 +772,7 @@ function renderScore(detail) {
     const d = el('div', 'tm');
     const ab = el('span', 'ab', t.abbr);
     if (t.color) ab.style.setProperty('--c', t.color);
-    const who = el('span');
+    const who = el('span', 'who');
     who.append(homeMark(t), ab);
     const nm = el('span', 'nm', t.name);
     if (t.record) { const r = el('span', 'rec', t.record); r.title = 'Record'; nm.append(' ', r); }
