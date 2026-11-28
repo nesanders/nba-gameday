@@ -43,7 +43,8 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .g{flex:0 0 auto;min-width:118px;text-align:left;padding:.3rem .5rem;font-variant-numeric:tabular-nums;font-size:13px}
 .g .t{display:flex;justify-content:space-between;gap:.6rem}
 .hm{display:inline-block;width:.85em;color:var(--muted);font-weight:400;font-size:.9em}
-.tm .hm,.th .hm{width:auto;margin-right:-.3rem}
+#score .tm .hm{width:auto;margin-right:.2em}          /* inside the team-name group: a small gap, no overlap */
+.th .hm{width:auto;margin-right:-.3rem}                /* box headings: a flex item, so cancel most of the gap */
 .g .s{font-size:11px;color:var(--muted)}
 .g.live .s{color:var(--live);font-weight:600}
 .g[aria-current=true]{outline:2px solid var(--accent);outline-offset:-1px}
